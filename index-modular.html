@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🧬 Ecosistema IA - Versión Modular</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧬</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#030306;overflow:hidden;touch-action:none;font-family:'Courier New',monospace;color:#c8e6c9}
+canvas{display:block}
+#ui-overlay{position:fixed;top:0;left:0;right:0;pointer-events:none;z-index:10}
+#top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(10,10,18,0.92);border-bottom:1px solid #1a3a2a;pointer-events:auto;flex-wrap:wrap;gap:4px}
+#top-bar .stat{font-size:10px;color:#80cbc4;white-space:nowrap}
+#top-bar button{background:#1a3a2a;color:#a5d6a7;border:1px solid #2e7d52;padding:4px 8px;border-radius:3px;font-size:10px;cursor:pointer;pointer-events:auto;font-family:inherit}
+#top-bar button:active{background:#2e7d52}
+#speed-control{display:flex;align-items:center;gap:6px;padding:3px 6px;background:rgba(26,58,42,0.6);border-radius:3px;margin-left:6px}
+#speed-control label{font-size:9px;color:#80cbc4}
+#speed-slider{width:70px;height:3px;-webkit-appearance:none;appearance:none;background:linear-gradient(to right,#ef5350,#ffee58,#69f0ae);border-radius:2px;outline:none;cursor:pointer}
+#speed-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#69f0ae;border:2px solid #2e7d52;cursor:pointer}
+#speed-value{font-size:9px;color:#69f0ae;min-width:28px;text-align:right}
+#debug-btn{background:#3a1a1a;color:#ff8a80;border-color:#c62828}
+#debug-btn.active{background:#4a1a2a;color:#ff5252;border-color:#ff5252;box-shadow:0 0 8px rgba(255,82,82,0.4)}
+#genome-panel{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,18,0.95);border-top:1px solid #1a3a2a;padding:8px 10px;pointer-events:auto;z-index:10;max-height:45vh;overflow-y:auto;transition:transform 0.3s}
+#genome-panel.hidden{transform:translateY(100%)}
+#genome-panel h3{font-size:12px;color:#69f0ae;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+#genome-panel .close-btn{background:none;border:none;color:#ef5350;font-size:14px;cursor:pointer}
+.section{margin:6px 0;padding:4px 6px;background:rgba(26,58,42,0.3);border-radius:4px;border-left:2px solid #2e7d52}
+.section h4{font-size:10px;color:#a5d6a7;margin-bottom:3px}
+.gene-row{display:flex;align-items:center;margin:2px 0;font-size:9px}
+.gene-label{width:85px;color:#80cbc4;flex-shrink:0}
+.gene-bar-bg{flex:1;height:6px;background:#1a1a2e;border-radius:3px;overflow:hidden;margin:0 6px}
+.gene-bar{height:100%;border-radius:3px}
+.gene-val{width:30px;text-align:right;color:#a5d6a7;flex-shrink:0;font-size:9px}
+.info-row{display:flex;justify-content:space-between;margin:1px 0;font-size:9px;color:#aaa}
+.info-row span:last-child{color:#c8e6c9}
+.emotion-bar{height:4px;border-radius:2px;margin:1px 0;background:#1a1a2e;overflow:hidden}
+.emotion-fill{height:100%;border-radius:2px;transition:width 0.3s}
+#log-panel{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,18,0.95);border-top:1px solid #1a3a2a;padding:6px 10px;pointer-events:auto;z-index:11;max-height:30vh;overflow-y:auto;font-size:9px;display:none}
+#log-panel .log-entry{padding:1px 0}.log-entry.birth{color:#69f0ae}.log-entry.death{color:#ef5350}.log-entry.colony{color:#42a5f5}.log-entry.ai{color:#ec407a}.log-entry.tactic{color:#7c4dff}
+#minimap{position:fixed;bottom:50px;right:8px;width:110px;height:110px;border:1px solid #2e7d52;border-radius:3px;z-index:10;background:rgba(10,10,18,0.7);pointer-events:auto}
+#instructions{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(10,10,18,0.95);border:1px solid #2e7d52;border-radius:8px;padding:16px;z-index:100;max-width:320px;text-align:center;pointer-events:auto}
+#instructions h2{color:#69f0ae;margin-bottom:8px;font-size:14px}
+#instructions p{font-size:10px;margin:4px 0;color:#80cbc4;text-align:left}
+#instructions button{margin-top:10px;background:#2e7d52;color:white;border:none;padding:6px 20px;border-radius:4px;font-size:12px;cursor:pointer}
+#zoom-controls{position:fixed;bottom:55px;left:8px;z-index:10;display:flex;flex-direction:column;gap:3px;pointer-events:auto}
+#zoom-controls button{width:30px;height:30px;border-radius:50%;background:rgba(10,10,18,0.85);border:1px solid #2e7d52;color:#a5d6a7;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+@media(min-width:768px){
+  #genome-panel{left:8px;bottom:8px;right:auto;max-width:280px;border-radius:6px}
+  #minimap{bottom:8px;right:8px}
+  #log-panel{left:8px;right:auto;max-width:280px;border-radius:6px;bottom:8px}
+  #zoom-controls{left:8px}
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui-overlay">
+  <div id="top-bar">
+    <span class="stat" id="stat-cells">🧬0</span>
+    <span class="stat" id="stat-food">🟢0</span>
+    <span class="stat" id="stat-colonies">🏛️0</span>
+    <span class="stat" id="stat-gen">G:<span id="max-gen">0</span></span>
+    <div id="speed-control">
+      <label for="speed-slider">⚡</label>
+      <input type="range" id="speed-slider" min="0" max="200" value="40">
+      <span id="speed-value">0.4x</span>
+    </div>
+    <button id="debug-btn">🧠</button>
+    <button id="btn-log">📋</button>
+    <button id="btn-pause">⏸️</button>
+    <button id="btn-reset">🔄</button>
+  </div>
+</div>
+<div id="genome-panel" class="hidden">
+  <h3><span id="genome-title">🧬 IA</span><button class="close-btn" id="close-genome">✕</button></h3>
+  <div id="genome-content"></div>
+</div>
+<div id="log-panel"><div id="log-content"></div></div>
+<canvas id="minimap"></canvas>
+<div id="zoom-controls">
+  <button id="zoom-in">+</button>
+  <button id="zoom-out">−</button>
+  <button id="zoom-follow">📍</button>
+</div>
+<div id="instructions">
+  <h2>🧬 Ecosistema IA Expandida</h2>
+  <p>🧠 <b>Personalidad:</b> rasgos únicos de comportamiento</p>
+  <p>📋 <b>Planificación:</b> secuencias de intención</p>
+  <p>🎓 <b>Aprendizaje:</b> Q-Learning ligero</p>
+  <p>😊 <b>Emociones:</b> afectan decisiones</p>
+  <button id="btn-start">▶️ Comenzar</button>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
