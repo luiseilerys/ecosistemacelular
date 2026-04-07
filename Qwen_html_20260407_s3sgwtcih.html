@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🧬 Ecosistema IA Expandida</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#030306;overflow:hidden;touch-action:none;font-family:'Courier New',monospace;color:#c8e6c9}
+canvas{display:block}
+#ui-overlay{position:fixed;top:0;left:0;right:0;pointer-events:none;z-index:10}
+#top-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(10,10,18,0.92);border-bottom:1px solid #1a3a2a;pointer-events:auto;flex-wrap:wrap;gap:4px}
+#top-bar .stat{font-size:10px;color:#80cbc4;white-space:nowrap}
+#top-bar button{background:#1a3a2a;color:#a5d6a7;border:1px solid #2e7d52;padding:4px 8px;border-radius:3px;font-size:10px;cursor:pointer;pointer-events:auto;font-family:inherit}
+#top-bar button:active{background:#2e7d52}
+#speed-control{display:flex;align-items:center;gap:6px;padding:3px 6px;background:rgba(26,58,42,0.6);border-radius:3px;margin-left:6px}
+#speed-control label{font-size:9px;color:#80cbc4}
+#speed-slider{width:70px;height:3px;-webkit-appearance:none;appearance:none;background:linear-gradient(to right,#ef5350,#ffee58,#69f0ae);border-radius:2px;outline:none;cursor:pointer}
+#speed-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#69f0ae;border:2px solid #2e7d52;cursor:pointer}
+#speed-value{font-size:9px;color:#69f0ae;min-width:28px;text-align:right}
+#debug-btn{background:#3a1a1a;color:#ff8a80;border-color:#c62828}
+#debug-btn.active{background:#4a1a2a;color:#ff5252;border-color:#ff5252;box-shadow:0 0 8px rgba(255,82,82,0.4)}
+#genome-panel{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,18,0.95);border-top:1px solid #1a3a2a;padding:8px 10px;pointer-events:auto;z-index:10;max-height:45vh;overflow-y:auto;transition:transform 0.3s}
+#genome-panel.hidden{transform:translateY(100%)}
+#genome-panel h3{font-size:12px;color:#69f0ae;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+#genome-panel .close-btn{background:none;border:none;color:#ef5350;font-size:14px;cursor:pointer}
+.section{margin:6px 0;padding:4px 6px;background:rgba(26,58,42,0.3);border-radius:4px;border-left:2px solid #2e7d52}
+.section h4{font-size:10px;color:#a5d6a7;margin-bottom:3px}
+.gene-row{display:flex;align-items:center;margin:2px 0;font-size:9px}
+.gene-label{width:85px;color:#80cbc4;flex-shrink:0}
+.gene-bar-bg{flex:1;height:6px;background:#1a1a2e;border-radius:3px;overflow:hidden;margin:0 6px}
+.gene-bar{height:100%;border-radius:3px}
+.gene-val{width:30px;text-align:right;color:#a5d6a7;flex-shrink:0;font-size:9px}
+.info-row{display:flex;justify-content:space-between;margin:1px 0;font-size:9px;color:#aaa}
+.info-row span:last-child{color:#c8e6c9}
+.emotion-bar{height:4px;border-radius:2px;margin:1px 0;background:#1a1a2e;overflow:hidden}
+.emotion-fill{height:100%;border-radius:2px;transition:width 0.3s}
+#log-panel{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,18,0.95);border-top:1px solid #1a3a2a;padding:6px 10px;pointer-events:auto;z-index:11;max-height:30vh;overflow-y:auto;font-size:9px;display:none}
+#log-panel .log-entry{padding:1px 0}.log-entry.birth{color:#69f0ae}.log-entry.death{color:#ef5350}.log-entry.colony{color:#42a5f5}.log-entry.ai{color:#ec407a}.log-entry.tactic{color:#7c4dff}
+#minimap{position:fixed;bottom:50px;right:8px;width:110px;height:110px;border:1px solid #2e7d52;border-radius:3px;z-index:10;background:rgba(10,10,18,0.7);pointer-events:auto}
+#instructions{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(10,10,18,0.95);border:1px solid #2e7d52;border-radius:8px;padding:16px;z-index:100;max-width:320px;text-align:center;pointer-events:auto}
+#instructions h2{color:#69f0ae;margin-bottom:8px;font-size:14px}
+#instructions p{font-size:10px;margin:4px 0;color:#80cbc4;text-align:left}
+#instructions button{margin-top:10px;background:#2e7d52;color:white;border:none;padding:6px 20px;border-radius:4px;font-size:12px;cursor:pointer}
+#zoom-controls{position:fixed;bottom:55px;left:8px;z-index:10;display:flex;flex-direction:column;gap:3px;pointer-events:auto}
+#zoom-controls button{width:30px;height:30px;border-radius:50%;background:rgba(10,10,18,0.85);border:1px solid #2e7d52;color:#a5d6a7;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+@media(min-width:768px){
+  #genome-panel{left:8px;bottom:8px;right:auto;max-width:280px;border-radius:6px}
+  #minimap{bottom:8px;right:8px}
+  #log-panel{left:8px;right:auto;max-width:280px;border-radius:6px;bottom:8px}
+  #zoom-controls{left:8px}
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui-overlay">
+  <div id="top-bar">
+    <span class="stat" id="stat-cells">🧬0</span>
+    <span class="stat" id="stat-food">🟢0</span>
+    <span class="stat" id="stat-colonies">🏛️0</span>
+    <span class="stat" id="stat-gen">G:<span id="max-gen">0</span></span>
+    <div id="speed-control">
+      <label for="speed-slider">⚡</label>
+      <input type="range" id="speed-slider" min="0" max="200" value="40">
+      <span id="speed-value">0.4x</span>
+    </div>
+    <button id="debug-btn">🧠</button>
+    <button id="btn-log">📋</button>
+    <button id="btn-pause">⏸️</button>
+    <button id="btn-reset">🔄</button>
+  </div>
+</div>
+<div id="genome-panel" class="hidden">
+  <h3><span id="genome-title">🧬 IA</span><button class="close-btn" id="close-genome">✕</button></h3>
+  <div id="genome-content"></div>
+</div>
+<div id="log-panel"><div id="log-content"></div></div>
+<canvas id="minimap"></canvas>
+<div id="zoom-controls">
+  <button id="zoom-in">+</button>
+  <button id="zoom-out">−</button>
+  <button id="zoom-follow">📍</button>
+</div>
+<div id="instructions">
+  <h2>🧬 Ecosistema IA Expandida</h2>
+  <p>🧠 <b>Personalidad:</b> rasgos únicos de comportamiento</p>
+  <p>📋 <b>Planificación:</b> secuencias de intención</p>
+  <p>🎓 <b>Aprendizaje:</b> Q-Learning ligero</p>
+  <p>😊 <b>Emociones:</b> afectan decisiones</p>
+  <button id="btn-start">▶️ Comenzar</button>
+</div>
+
+<script>
+// ============================================================
+//  CONFIGURACIÓN
+// ============================================================
+const CFG = {
+  WS: 4000, IC: 35, MC: 350, MF: 600, FSR: 0.7,
+  MB: 0.018, SC: 0.0006, MC2: 0.0015, AE: 0.003, ME: 1,
+  RE: 60, RC: 25, EFF: 24, EFK: 30, HSB: 1.8, DT: 0.1,
+  GS: 100, LM: 50
+};
+
+const GENES = {
+  speed:{l:'Velocidad',c:'#42a5f5',n:0.3,x:3.0}, size:{l:'Tamaño',c:'#ab47bc',n:0.2,x:1.0},
+  senseRange:{l:'Percepción',c:'#66bb6a',n:60,x:280}, aggression:{l:'Agresividad',c:'#ef5350',n:0.0,x:1.0},
+  sociability:{l:'Sociabilidad',c:'#ffa726',n:0.0,x:1.0}, metabolism:{l:'Metabolismo',c:'#ffee58',n:0.2,x:1.3},
+  mutationRate:{l:'Tasa Mutación',c:'#ec407a',n:0.02,x:0.4}, symbiosis:{l:'Simbiosis',c:'#ff7043',n:0.0,x:1.0},
+  defense:{l:'Defensa',c:'#78909c',n:0.0,x:1.0}, reproduction:{l:'Reproducción',c:'#26c6da',n:0.2,x:1.0},
+  curiosity:{l:'Curiosidad',c:'#ba68c8',n:0.1,x:1.0}, patience:{l:'Paciencia',c:'#4db6ac',n:0.1,x:1.0}
+};
+const GNAME = Object.keys(GENES);
+
+const BIOMES = {
+  fertile:{c:'rgba(50,200,100,0.06)',e:1.4,m:0.9,l:'🌿Fértil'}, toxic:{c:'rgba(200,50,50,0.06)',e:0.6,m:1.3,l:'☢️Tóxico'},
+  radiant:{c:'rgba(255,255,100,0.05)',e:1.1,m:1.0,l:'☀️Radiante'}, stable:{c:'rgba(100,100,200,0.04)',e:1.0,m:1.0,l:'⚖️Estable'}
+};
+
+const ROLES = {
+  SCOUT:{c:'#42a5f5',l:'Explorador',i:'🔍',m:{speed:1.3,sense:1.4,size:0.8}}, WORKER:{c:'#66bb6a',l:'Obrero',i:'⚒️',m:{metab:0.8,size:1.1}},
+  DEFENDER:{c:'#ef5350',l:'Defensor',i:'🛡️',m:{agg:1.4,size:1.2}}, BREEDER:{c:'#ec407a',l:'Reproductor',i:'🧬',m:{repro:1.5,speed:0.7}},
+  SIGNALER:{c:'#ffa726',l:'Señalizador',i:'📡',m:{symb:1.5,sense:1.2}}
+};
+
+const UCOL = {flee:'#ef5350',eat:'#66bb6a',reproduce:'#ec407a',symbiosis:'#ffab40',hunt:'#ff1744',joinColony:'#7c4dff',forage:'#a5d6a7',wander:'#78909c',investigate:'#ba68c8',defend:'#42a5f5'};
+
+// ============================================================
+//  UTILIDADES
+// ============================================================
+function cl(v,n,x){return Math.max(n,Math.min(x,v))}
+function lp(a,b,t){return a+(b-a)*t}
+function dist(x1,y1,x2,y2){return Math.hypot(x2-x1,y2-y1)}
+function rn(n,x){return n+Math.random()*(x-n)}
+
+// ============================================================
+//  CLASES
+// ============================================================
+class SpatialGrid {
+  constructor(sz){this.s=sz;this.m=new Map()}
+  clear(){this.m.clear()}
+  k(cx,cy){return cx*100003+cy}
+  ins(o){const cx=Math.floor(o.x/this.s),cy=Math.floor(o.y/this.s),k=this.k(cx,cy);if(!this.m.has(k))this.m.set(k,[]);this.m.get(k).push(o)}
+  q(x,y,r){
+    const res=[],r2=Math.ceil(r/this.s),cx=Math.floor(x/this.s),cy=Math.floor(y/this.s);
+    for(let dx=-r2;dx<=r2;dx++) for(let dy=-r2;dy<=r2;dy++){
+      const b=this.m.get(this.k(cx+dx,cy+dy));
+      if(b) for(const o of b) res.push(o);
+    }
+    return res;
+  }
+}
+
+class Personality {
+  constructor(p=null) {
+    this.caution = p ? lp(p.caution, rn(0.3,0.7), 0.3) : rn(0.2,0.8);
+    this.optimism = p ? lp(p.optimism, rn(0.3,0.7), 0.3) : rn(0.3,0.7);
+    this.stubbornness = p ? lp(p.stubbornness, rn(0.2,0.6), 0.3) : rn(0.1,0.5);
+    this.empathy = p ? lp(p.empathy, rn(0.3,0.7), 0.3) : rn(0.2,0.6);
+    this.creativity = p ? lp(p.creativity, rn(0.2,0.5), 0.3) : rn(0.1,0.4);
+    this.routine = p ? lp(p.routine, rn(0.3,0.6), 0.3) : rn(0.2,0.6);
+  }
+}
+
+class EpisodicMemory {
+  constructor() { this.events = []; this.max = 15; }
+  record(type, x, y, context={}) {
+    this.events.push({ type, x, y, t: performance.now(), strength: 1.0, context });
+    if (this.events.length > this.max) this.events.shift();
+  }
+  query(type, x, y, radius, maxAge=60000) {
+    const now = performance.now();
+    let best = null, bestScore = -1;
+    for (const e of this.events) {
+      if (type && e.type !== type) continue;
+      if ((now - e.t) > maxAge) continue;
+      const d = dist(x, y, e.x, e.y);
+      const decay = Math.max(0, 1 - (now - e.t) / maxAge);
+      const score = e.strength * decay * (1 - d / (radius || 200));
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+    return best;
+  }
+  inherit(parent) {
+    if(!parent) return;
+    const sorted = [...parent.events].sort((a,b) => b.strength - a.strength).slice(0,3);
+    for (const e of sorted) this.events.push({...e, strength: e.strength * 0.6, t: performance.now()});
+  }
+}
+
+class QLight {
+  constructor() {
+    this.table = new Map();
+    this.actions = ['flee','eat','reproduce','symbiosis','hunt','forage','wander','investigate'];
+    this.alpha = 0.15; this.gamma = 0.85; this.epsilon = 0.15;
+  }
+  stateKey(hunger, threat, foodVis, inColony) {
+    const h = hunger > 0.7 ? 'H' : hunger > 0.3 ? 'M' : 'L';
+    const t = threat ? 'T' : '-'; const f = foodVis ? 'F' : '-'; const c = inColony ? 'C' : '-';
+    return `${h}${t}${f}${c}`;
+  }
+  getQ(state, action) { return this.table.get(`${state}_${action}`) || 0; }
+  setQ(state, action, value) { this.table.set(`${state}_${action}`, value); }
+  update(state, action, reward, nextState) {
+    const currentQ = this.getQ(state, action);
+    let maxNextQ = -Infinity;
+    for (const a of this.actions) { const q = this.getQ(nextState, a); if (q > maxNextQ) maxNextQ = q; }
+    this.setQ(state, action, currentQ + this.alpha * (reward + this.gamma * maxNextQ - currentQ));
+  }
+  inherit(parent) { 
+    if(!parent) return;
+    for (const [key, val] of parent.table) this.table.set(key, val * 0.5); 
+  }
+}
+
+class EmotionalState {
+  constructor() { this.energy=0.5; this.stress=0.0; this.confidence=0.5; this.curiosity=0.3; this.frustration=0.0; this.contentment=0.3; }
+  update(hunger, threats, recentSuccess, colonyBonus) {
+    this.energy = cl(this.energy * 0.95 + (1 - hunger) * 0.05, 0, 1);
+    const stressTarget = threats.length > 0 ? Math.min(1, threats.length * 0.3 + (threats[0]?.danger || 0.5)) : 0;
+    this.stress = lp(this.stress, stressTarget, 0.05);
+    this.confidence = cl(this.confidence * 0.98 + (recentSuccess ? 0.08 : -0.02), 0, 1);
+    this.curiosity = lp(this.curiosity, this.contentment > 0.5 && this.stress < 0.3 ? 0.8 : 0.2, 0.03);
+    this.frustration = cl(this.frustration * 0.95 + (recentSuccess === false ? 0.1 : -0.03), 0, 1);
+    this.contentment = cl(this.contentment * 0.97 + (colonyBonus ? 0.03 : 0) + (1 - hunger) * 0.02 - this.stress * 0.02, 0, 1);
+  }
+  modifiers() {
+    return {
+      flee: 1 + this.stress * 1.2 - this.confidence * 0.3,
+      eat: 1 + (1 - this.energy) * 0.5 + this.frustration * 0.3,
+      reproduce: 1 + this.contentment * 0.5 - this.stress * 0.4,
+      symbiosis: 1 + (1 - this.stress) * this.contentment * 0.4 - this.stress * 0.2,
+      hunt: 1 + this.confidence * 0.6 - this.stress * 0.3,
+      forage: 1 + this.curiosity * 0.5 + this.frustration * 0.3,
+      wander: 1 + this.curiosity * 0.3 - this.frustration * 0.2,
+      investigate: 1 + this.curiosity * 0.8 - this.stress * 0.4,
+      defend: 1 + this.confidence * 0.5,
+      joinColony: 1 + (1 - this.stress) * 0.3
+    };
+  }
+}
+
+class BeliefMap {
+  constructor() { this.zones = new Map(); }
+  observe(type, x, y, intensity) {
+    const key = `${type}_${Math.floor(x/150)}_${Math.floor(y/150)}`;
+    const z = this.zones.get(key) || {type, x, y, intensity: 0, t: 0, visits: 0};
+    z.intensity = cl(z.intensity * 0.9 + intensity * 0.1, 0, 1);
+    z.t = performance.now(); z.visits++;
+    this.zones.set(key, z);
+  }
+  bestZone(type, cx, cy, radius) {
+    let best = null, bestScore = -1;
+    const r = Math.ceil((radius||200)/150);
+    const ccx = Math.floor(cx/150), ccy = Math.floor(cy/150);
+    for (const [k, z] of this.zones) {
+      if (z.type !== type) continue;
+      const dx = Math.floor(z.x/150)-ccx, dy = Math.floor(z.y/150)-ccy;
+      if (Math.abs(dx) > r || Math.abs(dy) > r) continue;
+      const age = (performance.now() - z.t) / 30000;
+      const distF = 1 - dist(cx,cy,z.x,z.y)/(radius||200);
+      const score = z.intensity * Math.max(0, 1-age) * Math.max(0, distF) * z.visits * 0.1;
+      if (score > bestScore) { bestScore = score; best = z; }
+    }
+    return best;
+  }
+  inherit(parent) {
+    if(!parent) return;
+    for (const [k, z] of parent.zones) this.zones.set(k, {...z, intensity: z.intensity * 0.5, visits: Math.floor(z.visits * 0.5)});
+  }
+}
+
+class NeuralCore {
+  constructor(w=null) {
+    if (w) { this.w = w; return; }
+    this.w = {
+      ih: Array.from({length:48}, ()=>rn(-0.5,0.5)),
+      hh: Array.from({length:36}, ()=>rn(-0.3,0.3)),
+      ho: Array.from({length:48}, ()=>rn(-0.5,0.5)),
+      bias_h: Array.from({length:6}, ()=>rn(-0.2,0.2)),
+      bias_o: Array.from({length:8}, ()=>rn(-0.2,0.2))
+    };
+    this.hidden = new Array(6).fill(0);
+  }
+  forward(inputs) {
+    const {ih, hh, ho, bias_h, bias_o} = this.w; const newHidden = [];
+    for (let i=0; i<6; i++) { let s = bias_h[i];
+      for (let j=0; j<8; j++) s += ih[i*8+j] * inputs[j];
+      for (let j=0; j<6; j++) s += hh[i*6+j] * this.hidden[j];
+      newHidden.push(Math.tanh(s));
+    }
+    this.hidden = newHidden; const output = [];
+    for (let i=0; i<8; i++) { let s = bias_o[i];
+      for (let j=0; j<6; j++) s += ho[i*6+j] * this.hidden[j];
+      output.push(cl(1.0 + s * 0.5, 0.15, 2.5));
+    }
+    return output;
+  }
+  inherit(parent) {
+    if(!parent) return;
+    this.w = { 
+      ih: parent.w.ih.map(v=>v*0.7+rn(-0.1,0.1)), 
+      hh: parent.w.hh.map(v=>v*0.7+rn(-0.1,0.1)), 
+      ho: parent.w.ho.map(v=>v*0.7+rn(-0.1,0.1)),
+      bias_h: parent.w.bias_h.map(v=>v*0.7+rn(-0.05,0.05)), 
+      bias_o: parent.w.bias_o.map(v=>v*0.7+rn(-0.05,0.05)) 
+    };
+    this.hidden.fill(0);
+  }
+}
+
+// ✅ BehavioralPlanner CON MÉTODO inherit()
+class BehavioralPlanner {
+  constructor() { this.currentPlan=null; this.planSteps=[]; this.planIndex=0; this.lastSuccessfulAction=null; this.repeatedFailures=0; }
+  getCurrentAction() { return (this.currentPlan && this.planIndex < this.planSteps.length) ? this.planSteps[this.planIndex] : null; }
+  advancePlan(success) {
+    if (success) {
+      this.lastSuccessfulAction = this.planSteps[this.planIndex]?.action;
+      this.repeatedFailures = 0; this.planIndex++;
+      if (this.planIndex >= this.planSteps.length) this.currentPlan = null;
+    } else {
+      this.repeatedFailures++;
+      if(this.repeatedFailures>3) { this.repeatedFailures=0; const c=this.planSteps[this.planIndex]; if(c) c.urgency=Math.min(1,c.urgency+0.3); }
+    }
+  }
+  // ✅ NUEVO: Método inherit para heredar tendencias de planificación
+  inherit(parent) {
+    if(!parent) return;
+    this.lastSuccessfulAction = parent.lastSuccessfulAction;
+    this.repeatedFailures = Math.floor(parent.repeatedFailures * 0.5);
+  }
+}
+
+class Colony {
+  constructor(id, center) {
+    this.id=id; this.center=center; this.members=new Set(); this.energyPool=0; this.signals=[];
+    this.roleDist={SCOUT:0,WORKER:0,DEFENDER:0,BREEDER:0,SIGNALER:0}; this.age=0; this.tactics=null; this.mood=0.5;
+  }
+  assignRoles() {
+    for(const c of this.members){
+      if(c.role)continue; let scores={}; const g=c.genes, p=c.personality;
+      for(const [r,mods] of Object.entries(ROLES)){
+        let s=1; if(mods.speed)s*=g.speed*mods.speed; if(mods.agg)s*=g.aggression*mods.agg*(1+p.caution*0.3);
+        if(mods.size)s*=g.size*mods.size; if(mods.metab)s*=(2-g.metabolism)*mods.metab;
+        if(mods.repro)s*=g.reproduction*mods.repro; if(mods.symb)s*=g.symbiosis*mods.symb*(1+p.empathy);
+        if(mods.sense)s*=g.senseRange/100*mods.sense*(1+p.creativity); scores[r]=s;
+      }
+      const sorted=Object.keys(scores).sort((a,b)=>scores[b]-scores[a]);
+      let assigned=sorted[0]; if(this.roleDist[assigned]>=this.members.size*0.45)assigned=sorted[1]||'WORKER';
+      c.role=assigned; c.roleColor=ROLES[assigned].c; this.roleDist[assigned]++;
+    }
+  }
+  emitSignal(type,x,y,strength=1.0){this.signals.push({type,x,y,strength:cl(strength,0,1),age:0});}
+  developTactics(){
+    const defC=this.roleDist.DEFENDER||0, scC=this.roleDist.SCOUT||0, t=this.members.size;
+    this.tactics = defC>=t*0.3?'fortress':scC>=t*0.3?'spread':t>=10?'expansion':'survival';
+  }
+  update(dt){
+    this.age+=dt; this.energyPool*=0.997;
+    this.signals=this.signals.filter(s=>{s.age+=dt;s.strength*=0.96;return s.age<500&&s.strength>0.05;});
+    let sx=0,sy=0,c=0; for(const m of this.members) if(!m.dead){sx+=m.x;sy+=m.y;c++;} else this.members.delete(m);
+    if(c>0) this.center={x:sx/c,y:sy/c};
+    const avgE=c>0?Array.from(this.members).reduce((a,m)=>a+m.energy,0)/c/100:0;
+    this.mood=lp(this.mood,avgE,0.02);
+    if(Math.floor(this.age*10)%200===0) this.developTactics();
+    return this.members.size>=2;
+  }
+}
+
+class Food { 
+  constructor(x,y){this.x=x;this.y=y;this.eaten=false;this.pulse=rn(0,Math.PI*2)} 
+  draw(ctx,c){
+    if(this.eaten)return;const sx=(this.x-c.x)*c.z+ctx.canvas.width/2,sy=(this.y-c.y)*c.z+ctx.canvas.height/2;
+    if(sx<-10||sx>ctx.canvas.width+10||sy<-10||sy>ctx.canvas.height+10)return;
+    ctx.beginPath();ctx.arc(sx,sy,3*c.z,0,Math.PI*2);ctx.fillStyle=`rgba(100,255,100,0.5)`;ctx.fill();
+  }
+}
+
+// ============================================================
+//  ESTADO GLOBAL
+// ============================================================
+let simSpeed=0.4, debugMode=false, cells=[], food=[], biomes=[], colonies=[];
+let selectedCell=null, paused=false, logs=[], globalId=0, maxGen=0;
+const cellGrid=new SpatialGrid(CFG.GS), foodGrid=new SpatialGrid(CFG.GS);
+const cam={x:CFG.WS/2,y:CFG.WS/2,z:0.6,tx:CFG.WS/2,ty:CFG.WS/2,tz:0.6};
+
+// ============================================================
+//  CÉLULA
+// ============================================================
+class Cell {
+  constructor(x, y, genome, gen=0, parent=null) {
+    this.id=globalId++; this.x=x; this.y=y; this.vx=rn(-0.3,0.3); this.vy=rn(-0.3,0.3);
+    this.generation=gen; if(maxGen<gen) maxGen=gen; this.dead=false; this.age=0; this.energy=40;
+    this.symbionts=new Set(); this.colony=null; this.role=null; this.roleColor=null;
+    this.decision=null; this.decisionTimer=0; this.pulsePhase=rn(0,Math.PI*2); this.wanderAngle=rn(0,Math.PI*2);
+    this.recentSuccess=null; this.successTimer=0; this.currentGoal='survive'; this.goalTimer=0;
+    this.genes={}; for(const n of GNAME) this.genes[n]=cl(genome[n]||rn(GENES[n].n,GENES[n].x),GENES[n].n,GENES[n].x);
+    this.radius=6+16*this.genes.size; this.senseRange=this.genes.senseRange; this.maxSpeed=this.genes.speed*1.5;
+    this.color=this._color();
+    this.personality=parent?new Personality(parent.personality):new Personality();
+    this.memory=new EpisodicMemory(); if(parent) this.memory.inherit(parent.memory);
+    this.qlearn=new QLight(); if(parent) this.qlearn.inherit(parent.qlearn);
+    this.emotions=new EmotionalState(); this.beliefs=new BeliefMap(); if(parent) this.beliefs.inherit(parent.beliefs);
+    this.neural=new NeuralCore(); if(parent) this.neural.inherit(parent.neural);
+    this.planner=new BehavioralPlanner(); if(parent) this.planner.inherit(parent.planner); // ✅ Ahora funciona
+  }
+  _color(){
+    const g=this.genes; let r=50+g.aggression*180+g.symbiosis*50, gr=80+g.sociability*140+g.metabolism*40, b=100+g.speed*60+g.defense*60;
+    const ef=cl(this.energy/50,0,1); if(ef<1){r=lp(r,255,1-ef); gr=lp(gr,50,1-ef);}
+    return `rgb(${cl(r,0,255)},${cl(gr,0,255)},${cl(b,0,255)})`;
+  }
+  update(dt, grid, foodGrid){
+    if(this.dead)return; this.age+=dt; this.pulsePhase+=dt*3; this.successTimer-=dt; if(this.successTimer<=0)this.recentSuccess=null;
+    let bm={e:1,m:1}; for(const b of biomes){const d=dist(this.x,this.y,b.x,b.y);if(d<b.r){const f=1-d/b.r;bm.e*=lp(1,BIOMES[b.type].e,f);bm.m*=lp(1,BIOMES[b.type].m,f);}}
+    const baseMetab=this.genes.metabolism*CFG.MB*dt, sizeMetab=this.radius*CFG.SC*dt, moveMetab=Math.hypot(this.vx,this.vy)*CFG.MC2*dt;
+    const colMod=(this.colony&&this.colony.energyPool>30)?0.85:1.0;
+    let change=-(baseMetab+sizeMetab+moveMetab)*bm.m; change+=CFG.AE*bm.e*dt*colMod;
+    if(this.colony){
+      if(this.energy>75&&this.colony.energyPool<1500){const d=3*dt;this.energy-=d;this.colony.energyPool+=d*1.15;}
+      if(this.energy<25&&this.colony.energyPool>15){const d=3*dt;this.colony.energyPool-=d;this.energy+=d*0.9;}
+    }
+    if(this.symbionts.size>0) change+=this.symbionts.size*0.008*dt; this.energy+=change;
+    if(this.energy<=CFG.ME){this.dead=true;return;}
+    const hunger=1-this.energy/100, hBoost=Math.max(1,1+hunger*(CFG.HSB-1)), effSense=this.senseRange*hBoost;
+    const nearby=grid.q(this.x,this.y,effSense), nearbyFood=foodGrid.q(this.x,this.y,effSense);
+    const threats=[]; for(const o of nearby){if(o===this||o.dead)continue; if(o.radius>this.radius*1.15&&o.genes.aggression>0.3) threats.push({cell:o,dist:dist(this.x,this.y,o.x,o.y),danger:o.genes.aggression*(o.radius/this.radius)});}
+    threats.sort((a,b)=>a.dist-b.dist);
+    this.emotions.update(hunger,threats,this.recentSuccess,this.colony?this.colony.mood:0);
+    if(nearbyFood.length>0){const afx=nearbyFood.reduce((a,f)=>a+f.x,0)/nearbyFood.length, afy=nearbyFood.reduce((a,f)=>a+f.y,0)/nearbyFood.length; this.beliefs.observe('food',afx,afy,nearbyFood.length/5);}
+    if(threats.length>0) this.beliefs.observe('danger',threats[0].cell.x,threats[0].cell.y,threats[0].danger);
+    this.goalTimer-=dt; if(this.goalTimer<=0){
+      if(hunger>0.75){this.currentGoal='survive';this.goalTimer=rn(1,3);}
+      else if(this.energy>CFG.RE&&nearby.some(o=>!o.dead&&o!==this&&dist(this.x,this.y,o.x,o.y)<80&&Math.abs(this.radius-o.radius)<o.radius*0.3)){this.currentGoal='reproduce';this.goalTimer=rn(2,4);}
+      else if(this.colony&&this.colony.tactics==='fortress'&&threats.length>0){this.currentGoal='defend';this.goalTimer=rn(1,2);}
+      else if(this.emotions.curiosity>0.6){this.currentGoal='explore';this.goalTimer=rn(3,6);}
+      else{this.currentGoal='survive';this.goalTimer=rn(2,4);}
+    }
+    this.decisionTimer-=dt; if(this.decisionTimer<=0){this.decision=this._evaluateAI(nearby,nearbyFood,threats,effSense);this.decisionTimer=rn(0.4,1.2)/(this.genes.speed*0.5+0.5);}
+    this._executeDecision(dt); this.x+=this.vx*dt*60; this.y+=this.vy*dt*60; this.vx*=0.96; this.vy*=0.96;
+    const ws=CFG.WS,m=50; if(this.x<m){this.x=m;this.vx*=-0.5;} if(this.x>ws-m){this.x=ws-m;this.vx*=-0.5;}
+    if(this.y<m){this.y=m;this.vy*=-0.5;} if(this.y>ws-m){this.y=ws-m;this.vy*=-0.5;}
+  }
+  _evaluateAI(nearby,nearbyFood,threats,senseRange){
+    const g=this.genes,E=this.energy,Ep=E/100,H=1-Ep,p=this.personality,emo=this.emotions;
+    const nIn=[H,threats.length>0?cl(threats[0].danger,0,1):0,nearbyFood.length>0?1:0,this.colony?this.colony.mood:0,emo.stress,emo.confidence,emo.curiosity,this.planner.currentPlan?0.8:0.2];
+    const nMod=this.neural.forward(nIn); const U={flee:0,eat:0,reproduce:0,symbiosis:0,hunt:0,joinColony:0,forage:0,wander:0,investigate:0,defend:0};
+    if(threats.length>0){const prox=1-threats[0].dist/senseRange; U.flee=(1/(1+Math.exp(-(threats[0].danger*prox*4-1.5))))*(0.6+(1-Ep)*0.4);}
+    const fAvail=nearbyFood.length>0?Math.min(1,nearbyFood.length/3):0, cfd=nearbyFood.length>0?Math.min(...nearbyFood.map(f=>dist(this.x,this.y,f.x,f.y))):9999;
+    U.eat=(H*0.6+(cfd<senseRange?1-cfd/senseRange:0)*0.4)*fAvail*(H>0.7?1.5:1.0);
+    const mF=this.memory.query('food',this.x,this.y,senseRange); if(mF&&mF.score>0.3) U.eat*=1+mF.score*0.5;
+    const bF=this.beliefs.bestZone('food',this.x,this.y,senseRange*2); if(bF&&bF.intensity>0.3) U.eat*=1+bF.intensity*0.3;
+    const eOk=E>CFG.RE?(Ep-0.65)/0.35:0, mates=nearby.filter(o=>!o.dead&&o!==this&&dist(this.x,this.y,o.x,o.y)<80&&Math.abs(this.radius-o.radius)<o.radius*0.3&&g.reproduction>0.3);
+    U.reproduce=cl(eOk,0,1)*Math.min(1,mates.length/2)*g.reproduction*0.85; if(mates.length) this._reproTarget=mates[0];
+    const syms=nearby.filter(o=>!o.dead&&g.symbiosis>0.3&&!this.symbionts.has(o.id)&&o.genes.symbiosis>0.3&&dist(this.x,this.y,o.x,o.y)<60);
+    U.symbiosis=(syms.length>0?Math.min(1,syms.length/2):0)*((3-this.symbionts.size)/3)*g.symbiosis*0.8; if(syms.length) this._symTarget=syms[0];
+    const prey=nearby.filter(o=>!o.dead&&this.radius>o.radius*1.15&&g.aggression>0.2);
+    U.hunt=g.aggression*(Math.min(1,prey.length/2)*0.6+H*0.2)*0.8; if(prey.length) this._huntTarget=prey[0];
+    if(this.colony&&threats.length>0&&(this.role==='DEFENDER'||g.aggression>0.6)) U.defend=0.9*(1-dist(this.x,this.y,this.colony.center.x,this.colony.center.y)/300);
+    U.forage=H>0.8&&fAvail<0.3?0.7*H:0;
+    const bI=this.beliefs.bestZone('unknown',this.x,this.y,senseRange);
+    U.investigate=(emo.curiosity*0.5+p.creativity*0.3)*(1-H)*(bI?bI.intensity:0.5);
+    const nCol=colonies.filter(c=>c!==this.colony&&dist(this.x,this.y,c.center.x,c.center.y)<senseRange);
+    U.joinColony=nCol.length>0?g.sociability*0.6:0; if(nCol.length) this._colonyTarget=nCol[0];
+    U.wander=0.08+(1-H)*0.08;
+    const eM=emo.modifiers(); for(const k of Object.keys(U)) if(eM[k]) U[k]*=eM[k];
+    U.flee*=(0.7+p.caution*0.6); U.hunt*=(0.7+(1-p.caution)*0.6)*(0.8+emo.confidence*0.4);
+    U.forage*=(0.7+p.creativity*0.6); U.investigate*=(0.6+p.creativity*0.8); U.eat*=(1+p.optimism*0.2);
+    const aOrd=['flee','eat','reproduce','symbiosis','hunt','joinColony','forage','wander'];
+    for(let i=0;i<aOrd.length&&i<nMod.length;i++) U[aOrd[i]]*=nMod[i];
+    const qSt=this.qlearn.stateKey(H,threats.length>0,nearbyFood.length>0,this.colony!==null);
+    for(const a of Object.keys(U)) U[a]+=this.qlearn.getQ(qSt,a)*0.15;
+    const cPA=this.planner.getCurrentAction(); if(cPA&&U[cPA.action]!==undefined) U[cPA.action]*=(1+cPA.urgency*0.5);
+    if(this.colony&&this.colony.tactics){
+      if(this.colony.tactics==='fortress'){U.defend*=1.5;U.flee*=0.7;}else if(this.colony.tactics==='spread'){U.forage*=1.3;U.wander*=1.2;}else if(this.colony.tactics==='expansion'){U.reproduce*=1.2;U.joinColony*=0.5;}
+    }
+    let best='wander', bs=U.wander; for(const [a,v] of Object.entries(U)){const s=v+Math.random()*0.03;if(s>bs){bs=s;best=a;}}
+    const res={action:best,utility:bs,utilities:U,goal:this.currentGoal,plan:this.planner.currentPlan};
+    if(best==='flee'&&threats.length) res.target=threats[0].cell;
+    else if(best==='eat'&&nearbyFood.length) res.target=nearbyFood.reduce((a,b)=>dist(this.x,this.y,a.x,a.y)<dist(this.x,this.y,b.x,b.y)?a:b);
+    else if(best==='reproduce'&&this._reproTarget) res.target=this._reproTarget;
+    else if(best==='symbiosis'&&this._symTarget) res.target=this._symTarget;
+    else if(best==='hunt'&&this._huntTarget) res.target=this._huntTarget;
+    else if(best==='joinColony'&&this._colonyTarget) res.target=this._colonyTarget;
+    else if(best==='investigate'){const bI=this.beliefs.bestZone('food',this.x,this.y,senseRange*1.5)||this.beliefs.bestZone('danger',this.x,this.y,senseRange*1.5);res.target=bI?{x:bI.x,y:bI.y}:{x:this.x+rn(-200,200),y:this.y+rn(-200,200)};}
+    else if(best==='defend'&&this.colony) res.target=this.colony.center;
+    return res;
+  }
+  _executeDecision(dt){
+    if(!this.decision)return; const d=this.decision, spd=this.maxSpeed*dt*60;
+    switch(d.action){
+      case 'flee':
+        if(d.target){const a=Math.atan2(this.y-d.target.y,this.x-d.target.x);this.vx+=Math.cos(a)*spd*0.4;this.vy+=Math.sin(a)*spd*0.4;}
+        break;
+      case 'defend':
+        if(d.target){const a=Math.atan2(d.target.y-this.y,d.target.x-this.x);this.vx+=Math.cos(a)*spd*0.2;this.vy+=Math.sin(a)*spd*0.2;}
+        break;
+      case 'hunt':
+        if(d.target&&!d.target.dead){
+          let fA=0; if(this.colony){const allies=Array.from(this.colony.members).filter(m=>m!==this&&!m.dead&&m.role==='DEFENDER');
+            if(allies.length>0){const nA=allies.reduce((a,b)=>dist(this.x,this.y,a.x,a.y)<dist(this.x,this.y,b.x,b.y)?a:b);
+              const aP=Math.atan2(d.target.y-this.y,d.target.x-this.x),aA=Math.atan2(nA.y-this.y,nA.x-this.x); fA=aP+(aA>aP?Math.PI/2:-Math.PI/2);}}
+          const a=fA||Math.atan2(d.target.y-this.y,d.target.x-this.x); this.vx+=Math.cos(a)*spd*0.3; this.vy+=Math.sin(a)*spd*0.3;
+          if(dist(this.x,this.y,d.target.x,d.target.y)<this.radius+d.target.radius&&d.target.radius<this.radius*0.85){
+            d.target.dead=true;this.energy+=CFG.EFK;this.recentSuccess=true;this.successTimer=2;this.memory.record('hunt_success',d.target.x,d.target.y,{energy:this.energy});
+            this.beliefs.observe('danger',d.target.x,d.target.y,0.8); this.planner.advancePlan(true);}
+        }
+        break;
+      case 'eat':
+        if(d.target&&!d.target.eaten){
+          const a=Math.atan2(d.target.y-this.y,d.target.x-this.x);this.vx+=Math.cos(a)*spd*0.25;this.vy+=Math.sin(a)*spd*0.25;
+          if(dist(this.x,this.y,d.target.x,d.target.y)<this.radius+5){d.target.eaten=true;this.energy+=CFG.EFF;this.recentSuccess=true;this.successTimer=2;
+            this.memory.record('food',d.target.x,d.target.y,{energy:this.energy});this.planner.advancePlan(true);}
+        }
+        break;
+      case 'reproduce':
+        if(d.target&&!d.target.dead){
+          if(dist(this.x,this.y,d.target.x,d.target.y)<50){this._reproduce(d.target);this.energy-=CFG.RC;this.recentSuccess=true;this.successTimer=3;this.planner.advancePlan(true);}
+          else{const a=Math.atan2(d.target.y-this.y,d.target.x-this.x);this.vx+=Math.cos(a)*spd*0.18;this.vy+=Math.sin(a)*spd*0.18;}
+        }
+        break;
+      case 'symbiosis':
+        if(d.target&&!d.target.dead){
+          if(dist(this.x,this.y,d.target.x,d.target.y)<30){if(!this.symbionts.has(d.target.id)&&this.symbionts.size<3&&d.target.symbionts.size<3){
+            this.symbionts.add(d.target.id);d.target.symbionts.add(this.id);this.recentSuccess=true;this.successTimer=2;addLog(`🤝 Simbiosis: #${this.id} ↔ #${d.target.id}`,'ai');}}
+          else{const a=Math.atan2(d.target.y-this.y,d.target.x-this.x);this.vx+=Math.cos(a)*spd*0.15;this.vy+=Math.sin(a)*spd*0.15;}
+        }
+        break;
+      case 'forage': {
+        const mT=this.memory.query('food',this.x,this.y,this.senseRange*2), bT=this.beliefs.bestZone('food',this.x,this.y,this.senseRange*2);
+        let tX,tY; if(mT&&mT.score>0.4){tX=mT.x;tY=mT.y;} else if(bT&&bT.intensity>0.3){tX=bT.x;tY=bT.y;}
+        else{this.wanderAngle+=Math.sin(this.age*0.3)*0.6;tX=this.x+Math.cos(this.wanderAngle)*100;tY=this.y+Math.sin(this.wanderAngle)*100;}
+        const a=Math.atan2(tY-this.y,tX-this.x);this.vx+=Math.cos(a)*spd*0.15;this.vy+=Math.sin(a)*spd*0.15;if(Math.random()<0.015)this.wanderAngle+=rn(-1,1);
+        break;
+      }
+      case 'investigate':
+        if(d.target){const a=Math.atan2(d.target.y-this.y,d.target.x-this.x);this.vx+=Math.cos(a)*spd*0.12;this.vy+=Math.sin(a)*spd*0.12;
+          if(dist(this.x,this.y,d.target.x,d.target.y)<30){this.beliefs.observe('unknown',d.target.x,d.target.y,0.3);this.recentSuccess=true;this.successTimer=1;}
+        }
+        break;
+      case 'joinColony': {
+        const col=d.target;
+        if(col&&!this.colony){
+          if(dist(this.x,this.y,col.center.x,col.center.y)<60){this.colony=col;col.members.add(this);col.assignRoles();col.developTactics();
+            addLog(`🏛️ #${this.id} se unió a Colonia #${col.id}`,'colony');this.recentSuccess=true;this.successTimer=3;this.planner.advancePlan(true);}
+          else{const a=Math.atan2(col.center.y-this.y,col.center.x-this.x);this.vx+=Math.cos(a)*spd*0.15;this.vy+=Math.sin(a)*spd*0.15;}
+        }
+        break;
+      }
+      case 'wander':
+        if(this.planner.lastSuccessfulAction==='wander'&&this.personality.routine>0.5)this.wanderAngle+=(Math.random()-0.5)*0.2;
+        else this.wanderAngle+=(Math.random()-0.5)*0.5;
+        this.vx+=Math.cos(this.wanderAngle)*spd*0.05;this.vy+=Math.sin(this.wanderAngle)*spd*0.05;
+        break;
+    }
+    if(this.planner.currentPlan) this.planner.advancePlan(this.recentSuccess===true);
+    const sp=Math.hypot(this.vx,this.vy); if(sp>this.maxSpeed){this.vx=(this.vx/sp)*this.maxSpeed;this.vy=(this.vy/sp)*this.maxSpeed;}
+  }
+  _reproduce(mate){
+    if(cells.length>=CFG.MC)return; const cg={}; const p=Math.random()<0.5?this:mate;
+    for(const n of GNAME){const base=Math.random()<0.5?this.genes[n]:mate.genes[n];const r=GENES[n].x-GENES[n].n;
+      cg[n]=Math.random()<p.genes.mutationRate?cl(base+rn(-0.15,0.15)*r,GENES[n].n,GENES[n].x):base;}
+    const child=new Cell((this.x+mate.x)/2+rn(-15,15),(this.y+mate.y)/2+rn(-15,15),cg,Math.max(this.generation,mate.generation)+1,p);
+    child.energy=22;cells.push(child);addLog(`🧬 Nació #${child.id} (G${child.generation})`,'birth');
+  }
+  draw(ctx, c){
+    if(this.dead)return; const sx=(this.x-c.x)*c.z+ctx.canvas.width/2, sy=(this.y-c.y)*c.z+ctx.canvas.height/2;
+    const r=this.radius*c.z; if(sx<-r*3||sx>ctx.canvas.width+r*3||sy<-r*3||sy>ctx.canvas.height+r*3)return;
+    const pulse=1+Math.sin(this.pulsePhase)*0.08, pr=r*pulse;
+    const glow=ctx.createRadialGradient(sx,sy,pr*0.5,sx,sy,pr*2.5);
+    glow.addColorStop(0,`rgba(${cl(30+this.genes.aggression*100,0,255)},${cl(60+this.genes.symbiosis*100,0,255)},${cl(80+this.genes.speed*80,0,255)},0.3)`);
+    glow.addColorStop(1,'transparent'); ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy,pr*2.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(sx,sy,pr,0,Math.PI*2);ctx.fillStyle=this.color;ctx.fill();ctx.strokeStyle=`rgba(255,255,255,0.15)`;ctx.lineWidth=Math.max(1,c.z);ctx.stroke();
+    ctx.beginPath();ctx.arc(sx,sy,pr*0.35,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,0.2)`;ctx.fill();
+    if(this.role){ctx.beginPath();ctx.arc(sx,sy,pr+2.5*c.z,0,Math.PI*2);ctx.strokeStyle=this.roleColor;ctx.lineWidth=Math.max(2,3*c.z);ctx.stroke();}
+    if(debugMode&&this.decision?.target){const t=this.decision.target;
+      let tx,ty; if(t.x!==undefined){tx=t.x;ty=t.y;} else{tx=t.x;ty=t.y;}
+      const tsx=(tx-c.x)*c.z+ctx.canvas.width/2,tsy=(ty-c.y)*c.z+ctx.canvas.height/2;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(tsx,tsy);
+      ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);}
+    if(selectedCell===this){ctx.beginPath();ctx.arc(sx,sy,pr+6*c.z,0,Math.PI*2);ctx.strokeStyle='#69f0ae';ctx.lineWidth=Math.max(1.5,2.5*c.z);
+      ctx.setLineDash([4*c.z,4*c.z]);ctx.stroke();ctx.setLineDash([]);}
+  }
+  drawDebug(ctx, c){
+    if(!this.decision)return; const sx=(this.x-c.x)*c.z+ctx.canvas.width/2,sy=(this.y-c.y)*c.z+ctx.canvas.height/2;
+    const r=this.radius*c.z, bw=Math.max(40,55*c.z),bh=Math.max(3,4*c.z),g=Math.max(1,2*c.z);
+    let y=sy-r-25*c.z; ctx.font=`${Math.max(8,9*c.z)}px Courier New`;
+    ctx.fillStyle=this.role?this.roleColor:'#fff';
+    ctx.fillText(`${this.role||'Indie'} | ${this.currentGoal}${this.planner.currentPlan?' >'+this.planner.currentPlan:''}`,sx-bw/2,y); y+=12*c.z;
+    const emo=this.emotions, ems=[{l:'⚡',v:emo.energy,c:'#69f0ae'},{l:'😰',v:emo.stress,c:'#ef5350'},{l:'💪',v:emo.confidence,c:'#42a5f5'},{l:'🔍',v:emo.curiosity,c:'#ba68c8'}];
+    for(const e of ems){ctx.fillStyle='rgba(255,255,255,0.06)';ctx.fillRect(sx-bw/2,y,bw,bh);ctx.fillStyle=e.c;ctx.fillRect(sx-bw/2,y,bw*cl(e.v,0,1),bh);y+=bh+1;}
+    y+=2*c.z; const sorted=Object.entries(this.decision.utilities).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    for(const [k,v] of sorted){if(v<0.03)continue;const uc=UCOL[k]||'#888';ctx.fillStyle=k===this.decision.action?uc:'rgba(255,255,255,0.06)';
+      ctx.fillRect(sx-bw/2,y,bw*(k===this.decision.action?1:v),bh);ctx.fillStyle='#ccc';ctx.fillText(`${k}:${v.toFixed(1)}`,sx+bw/2+3,y+bh-1);y+=bh+g;}
+  }
+}
+
+// ============================================================
+//  BIOMAS & GAME LOOP
+// ============================================================
+function initBiomes(){biomes=[];const types=Object.keys(BIOMES);for(let i=0;i<12;i++)biomes.push({x:rn(200,CFG.WS-200),y:rn(200,CFG.WS-200),r:rn(300,600),type:types[i%4]});}
+function drawBiomes(ctx,c){for(const b of biomes){const sx=(b.x-c.x)*c.z+ctx.canvas.width/2,sy=(b.y-c.y)*c.z+ctx.canvas.height/2,r=b.r*c.z;
+  ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fillStyle=BIOMES[b.type].c;ctx.fill();
+  if(c.z>0.25){ctx.font=`${9*c.z}px Courier New`;ctx.fillStyle='rgba(255,255,255,0.2)';ctx.textAlign='center';ctx.fillText(BIOMES[b.type].l,sx,sy);}}}
+
+function addLog(m,t=''){logs.unshift({m,t});if(logs.length>CFG.LM)logs.pop();}
+function init(){
+  cells=[];food=[];colonies=[];selectedCell=null;logs=[];globalId=0;maxGen=0;initBiomes();
+  for(let i=0;i<CFG.IC;i++){const g={};for(const n of GNAME)g[n]=rn(GENES[n].n,GENES[n].x);const c=new Cell(rn(300,CFG.WS-300),rn(300,CFG.WS-300),g,0);c.energy=rn(40,65);cells.push(c);}
+  for(let cl=0;cl<8;cl++){const cx=rn(200,3800),cy=rn(200,3800);for(let i=0;i<38;i++)food.push(new Food(cx+rn(-150,150),cy+rn(-150,150)));}
+  for(let i=0;i<80;i++)food.push(new Food(rn(50,3950),rn(50,3950))); addLog('🧬 Ecosistema IA Iniciado');
+}
+function update(){
+  if(paused)return; const dt=CFG.DT*simSpeed;
+  if(food.length<CFG.MF&&Math.random()<CFG.FSR*simSpeed){if(cells.length>0&&Math.random()<0.7){const r=cells[Math.floor(Math.random()*cells.length)];food.push(new Food(r.x+rn(-200,200),r.y+rn(-200,200)));}else food.push(new Food(rn(50,3950),rn(50,3950)));}
+  cellGrid.clear();foodGrid.clear(); for(const c of cells) if(!c.dead) cellGrid.ins(c); for(const f of food) if(!f.eaten) foodGrid.ins(f);
+  colonies=colonies.filter(col=>col.update(dt));
+  for(const c of cells) if(!c.dead) c.update(dt,cellGrid,foodGrid);
+  cells=cells.filter(c=>!c.dead); food=food.filter(f=>!f.eaten);
+  const unassigned=cells.filter(c=>!c.colony&&c.genes.sociability>0.5&&c.age>0.5), used=new Set();
+  for(const c of unassigned){if(used.has(c.id))continue;const nearby=unassigned.filter(o=>!used.has(o.id)&&dist(c.x,c.y,o.x,o.y)<80);
+    if(nearby.length>=4){const col=new Colony(colonies.length,{x:c.x,y:c.y});for(const m of nearby.slice(0,8)){m.colony=col;col.members.add(m);used.add(m.id);col.emitSignal('rally',m.x,m.y);}
+      col.assignRoles();col.developTactics();colonies.push(col);addLog(`🏛️ Colonia #${col.id} (${col.members.size} miembros, táctica: ${col.tactics})`,'colony');}}
+  if(cells.length<8){for(let i=0;i<5;i++){const g={};for(const n of GNAME)g[n]=rn(GENES[n].n,GENES[n].x);cells.push(new Cell(rn(200,3800),rn(200,3800),g,0));}addLog('🔄 Repoblación','birth');}
+  if(selectedCell&&!selectedCell.dead){cam.tx=selectedCell.x;cam.ty=selectedCell.y;}
+  cam.x=lp(cam.x,cam.tx,0.08);cam.y=lp(cam.y,cam.ty,0.08);cam.z=lp(cam.z,cam.tz,0.08);
+  if(selectedCell&&selectedCell.dead){selectedCell=null;document.getElementById('genome-panel').classList.add('hidden');}
+}
+
+function render(){
+  const ctx=document.getElementById('gameCanvas').getContext('2d'); ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  const grd=ctx.createRadialGradient(ctx.canvas.width/2,ctx.canvas.height/2,0,ctx.canvas.width/2,ctx.canvas.height/2,ctx.canvas.width*0.8);
+  grd.addColorStop(0,'#080b10');grd.addColorStop(1,'#030406');ctx.fillStyle=grd;ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  drawBiomes(ctx,cam);
+  for(const col of colonies) for(const s of col.signals){const sx=(s.x-cam.x)*cam.z+ctx.canvas.width/2,sy=(s.y-cam.y)*cam.z+ctx.canvas.height/2,sr=120*s.str*cam.z;
+    ctx.beginPath();ctx.arc(sx,sy,sr,0,Math.PI*2);ctx.fillStyle=s.type==='danger'?`rgba(239,83,80,${s.str*0.12})`:s.type==='food'?`rgba(102,187,106,${s.str*0.12})`:`rgba(255,255,100,${s.str*0.08})`;ctx.fill();}
+  for(const col of colonies){const ms=Array.from(col.members);for(let i=0;i<ms.length;i++)for(let j=i+1;j<ms.length;j++){const d=dist(ms[i].x,ms[i].y,ms[j].x,ms[j].y);
+    if(d<150){const ax=(ms[i].x-cam.x)*cam.z+ctx.canvas.width/2,ay=(ms[i].y-cam.y)*cam.z+ctx.canvas.height/2,bx=(ms[j].x-cam.x)*cam.z+ctx.canvas.width/2,by=(ms[j].y-cam.y)*cam.z+ctx.canvas.height/2;
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.strokeStyle=`rgba(66,165,245,${0.12*(1-d/150)})`;ctx.lineWidth=1;ctx.stroke();}}}
+  for(const f of food) f.draw(ctx,cam); for(const c of cells) c.draw(ctx,cam);
+  if(debugMode) for(const c of cells){const sx=(c.x-cam.x)*cam.z+ctx.canvas.width/2,sy=(c.y-cam.y)*cam.z+ctx.canvas.height/2;
+    if(sx>-120&&sx<ctx.canvas.width+120&&sy>-120&&sy<ctx.canvas.height+120) c.drawDebug(ctx,cam);}
+  document.getElementById('stat-cells').textContent=`🧬${cells.length}`; document.getElementById('stat-food').textContent=`🟢${food.length}`;
+  document.getElementById('stat-colonies').textContent=`🏛️${colonies.length}`; document.getElementById('max-gen').textContent=maxGen;
+  const mc=document.getElementById('minimap'),mx=mc.getContext('2d'); const s=mc.width/CFG.WS;mx.clearRect(0,0,mc.width,mc.height);
+  mx.fillStyle='rgba(8,11,16,0.8)';mx.fillRect(0,0,mc.width,mc.height);
+  for(const b of biomes){mx.fillStyle=BIOMES[b.type].c;mx.beginPath();mx.arc(b.x*s,b.y*s,b.r*s,0,Math.PI*2);mx.fill();}
+  for(const c of cells){mx.fillStyle=c.role?c.roleColor:c.color;mx.fillRect(c.x*s-1,c.y*s-1,2,2);}
+  const vx=(cam.x-mc.width/(2*cam.z))*s,vy=(cam.y-mc.height/(2*cam.z))*s;mx.strokeStyle='#69f0ae';mx.lineWidth=1;mx.strokeRect(vx,vy,mc.width/cam.z*s,mc.height/cam.z*s);
+}
+
+function showGenome(c){
+  const p=document.getElementById('genome-panel');p.classList.remove('hidden');
+  document.getElementById('genome-title').textContent=`🧬 #${c.id} | G${c.generation} | ⚡${c.energy.toFixed(1)}`;
+  let h=`<div class="section"><h4>🧬 Genoma</h4>`; for(const n of GNAME){const g=GENES[n],v=c.genes[n],pct=((v-g.n)/(g.x-g.n))*100;
+    h+=`<div class="gene-row"><span class="gene-label">${g.l}</span><div class="gene-bar-bg"><div class="gene-bar" style="width:${pct}%;background:${g.c}"></div></div><span class="gene-val">${v.toFixed(2)}</span></div>`;}
+  h+=`</div><div class="section"><h4>🧠 Personalidad</h4>`; const pers=c.personality;
+  h+=`<div class="info-row"><span>Precaución</span><span>${(pers.caution*100).toFixed(0)}%</span></div><div class="info-row"><span>Optimismo</span><span>${(pers.optimism*100).toFixed(0)}%</span></div>
+  <div class="info-row"><span>Terquedad</span><span>${(pers.stubbornness*100).toFixed(0)}%</span></div><div class="info-row"><span>Empatía</span><span>${(pers.empathy*100).toFixed(0)}%</span></div>
+  <div class="info-row"><span>Creatividad</span><span>${(pers.creativity*100).toFixed(0)}%</span></div></div>`;
+  h+=`<div class="section"><h4>😊 Estado Emocional</h4>`; const emo=c.emotions;
+  const ems=[{l:'⚡ Vitalidad',v:emo.energy,c:'#69f0ae'},{l:'😰 Estrés',v:emo.stress,c:'#ef5350'},{l:'💪 Confianza',v:emo.confidence,c:'#42a5f5'},{l:'🔍 Curiosidad',v:emo.curiosity,c:'#ba68c8'},{l:'😤 Frustración',v:emo.frustration,c:'#ff7043'}];
+  for(const e of ems){h+=`<div class="info-row"><span>${e.l}</span><span>${(e.v*100).toFixed(0)}%</span></div><div class="emotion-bar"><div class="emotion-fill" style="width:${e.v*100}%;background:${e.c}"></div></div>`;}
+  h+=`</div><div class="section"><h4>🤖 IA</h4>`; h+=`<div class="info-row"><span>Objetivo</span><span>${c.currentGoal}</span></div>
+  <div class="info-row"><span>Plan</span><span>${c.planner.currentPlan||'-'}</span></div><div class="info-row"><span>Memoria</span><span>${c.memory.events.length} recuerdos</span></div>
+  <div class="info-row"><span>Creencias</span><span>${c.beliefs.zones.size} zonas</span></div><div class="info-row"><span>Q-Table</span><span>${c.qlearn.table.size} entradas</span></div>
+  <div class="info-row"><span>Colonia</span><span>${c.colony?'#'+c.colony.id+' ('+c.role+')':'-'}</span></div>
+  ${c.colony?`<div class="info-row"><span>Táctica</span><span>${c.colony.tactics||'-'}</span></div>`:''}</div>`;
+  document.getElementById('genome-content').innerHTML=h;
+}
+
+// ============================================================
+//  EVENT LISTENERS
+// ============================================================
+document.getElementById('speed-slider').addEventListener('input',function(){simSpeed=this.value/100;document.getElementById('speed-value').textContent=simSpeed.toFixed(1)+'x';});
+document.getElementById('debug-btn').addEventListener('click',function(){debugMode=!debugMode;this.classList.toggle('active',debugMode);this.textContent=debugMode?'🧠 ON':'🧠';});
+document.getElementById('btn-start').addEventListener('click',()=>{document.getElementById('instructions').style.display='none';init();});
+document.getElementById('btn-pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'▶️':'⏸️';});
+document.getElementById('btn-reset').addEventListener('click',()=>{init();document.getElementById('genome-panel').classList.add('hidden');});
+document.getElementById('close-genome').addEventListener('click',()=>{document.getElementById('genome-panel').classList.add('hidden');selectedCell=null;});
+document.getElementById('btn-log').addEventListener('click',()=>{const p=document.getElementById('log-panel');p.style.display=p.style.display==='none'?'block':'none';if(p.style.display==='block')document.getElementById('log-content').innerHTML=logs.map(l=>`<div class="log-entry ${l.t}">${l.m}</div>`).join('');});
+
+const cvs=document.getElementById('gameCanvas'); let drag=false, dragP={x:0,y:0}, camStart={x:0,y:0}, lastDist=0;
+cvs.addEventListener('mousedown', e => { drag=true; dragP={x:e.clientX,y:e.clientY}; camStart={x:cam.tx,y:cam.ty}; });
+cvs.addEventListener('mousemove', e => { if(!drag)return; cam.tx=camStart.x-(e.clientX-dragP.x)/cam.z; cam.ty=camStart.y-(e.clientY-dragP.y)/cam.z; });
+cvs.addEventListener('mouseup', e => { if(Math.hypot(e.clientX-dragP.x,e.clientY-dragP.y)<10) selCell(e.clientX,e.clientY); drag=false; });
+cvs.addEventListener('touchstart', e => {
+  if(e.touches.length===1){ drag=true; dragP={x:e.touches[0].clientX,y:e.touches[0].clientY}; camStart={x:cam.tx,y:cam.ty}; }
+  if(e.touches.length===2){ drag=false; lastDist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY); }
+}, {passive:false});
+cvs.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if(e.touches.length===2){ const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY); cam.tz=cl(cam.tz*(d/lastDist),0.15,3); lastDist=d; }
+  if(e.touches.length===1&&drag){ cam.tx=camStart.x-(e.touches[0].clientX-dragP.x)/cam.z; cam.ty=camStart.y-(e.touches[0].clientY-dragP.y)/cam.z; }
+}, {passive:false});
+cvs.addEventListener('touchend', e => {
+  if(e.changedTouches.length===1 && e.touches.length===0) selCell(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  drag=false;
+});
+function selCell(cx,cy){
+  const r=cvs.getBoundingClientRect(), wx=(cx-r.left-cvs.width/2)/cam.z+cam.x, wy=(cy-r.top-cvs.height/2)/cam.z+cam.y;
+  let best=null,bd=9999; for(const c of cells){if(c.dead)continue;const d=dist(wx,wy,c.x,c.y);if(d<Math.max(c.radius+10,25)&&d<bd){best=c;bd=d;}}
+  if(best){selectedCell=best;showGenome(best);cam.tx=best.x;cam.ty=best.y;}else{selectedCell=null;document.getElementById('genome-panel').classList.add('hidden');}
+}
+document.getElementById('zoom-in').onclick=()=>cam.tz=cl(cam.tz*1.3,0.15,3);
+document.getElementById('zoom-out').onclick=()=>cam.tz=cl(cam.tz/1.3,0.15,3);
+document.getElementById('zoom-follow').onclick=()=>{if(selectedCell&&!selectedCell.dead){cam.tx=selectedCell.x;cam.ty=selectedCell.y;cam.tz=1.2;}};
+function resize(){const d=Math.min(window.devicePixelRatio||1,2);cvs.width=window.innerWidth*d;cvs.height=window.innerHeight*d;cvs.style.width=window.innerWidth+'px';cvs.style.height=window.innerHeight+'px';
+  const mc=document.getElementById('minimap');mc.width=110*d;mc.height=110*d;mc.style.width='110px';mc.style.height='110px';mc.getContext('2d').scale(d,d);}
+window.addEventListener('resize',resize);resize();
+
+let lt=0,gt=0; function loop(ts){const dt=ts-lt;lt=ts;update();render();gt+=dt;if(gt>500){gt=0;if(selectedCell&&!selectedCell.dead)showGenome(selectedCell);}requestAnimationFrame(loop);}
+
+initBiomes();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
