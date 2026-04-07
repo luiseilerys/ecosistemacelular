@@ -34,6 +34,24 @@ export class Cell {
     this.vy = randomRange(-0.5, 0.5);
     this.angle = Math.random() * Math.PI * 2;
     
+    // Morfología procedural (forma dinámica basada en genes, rol e IA)
+    this.baseVertices = 6 + Math.floor(this.genes.size * 0.3); // Más tamaño = más vértices
+    this.vertexOffsets = new Float32Array(this.baseVertices);
+    this.noiseOffset = Math.random() * 1000; // Para animación procedural
+    this.formFactor = this.calculateFormFactor(); // 0.3 (alargado) a 1.5 (irregular)
+    this.rotationSpeed = (this.genes.speed - 5) * 0.002; // Velocidad afecta rotación
+    
+    // Inicializar offsets basados en personalidad y rol
+    for (let i = 0; i < this.baseVertices; i++) {
+      const angle = (i / this.baseVertices) * Math.PI * 2;
+      // Variación según agresividad (picos) y sociabilidad (suavidad)
+      const aggressionMod = this.genes.aggression * 0.15;
+      const socialMod = this.genes.sociability * 0.05;
+      this.vertexOffsets[i] = (Math.sin(angle * 3 + this.noiseOffset) * aggressionMod) + 
+                               (Math.cos(angle * 2) * socialMod) + 
+                               randomRange(-0.05, 0.05);
+    }
+    
     // Genes (11 genes principales)
     this.genes = genes || this.generateGenes();
     
@@ -128,6 +146,76 @@ export class Cell {
   }
 
   /**
+   * Calcula el factor de forma basado en rol, entorno e IA
+   * @returns {number} Factor entre 0.3 (alargado) y 1.5 (irregular)
+   */
+  calculateFormFactor() {
+    let factor = 1.0;
+    
+    // Rol afecta forma
+    switch(this.role) {
+      case 'explorer': factor *= 0.8; break; // Más alargado para moverse rápido
+      case 'defender': factor *= 1.4; break; // Más irregular/agresivo
+      case 'worker': factor *= 0.9; break; // Compacto
+      case 'reproducer': factor *= 1.1; break; // Redondeado
+      case 'signaler': factor *= 1.2; break; // Con picos para señalizar
+    }
+    
+    // Genes afectan forma
+    factor += this.genes.aggression * 0.2; // Más agresivo = más picos
+    factor -= this.genes.sociability * 0.1; // Más social = más suave
+    factor += (this.genes.defense - 5) * 0.05; // Defensa añade irregularidad
+    
+    // Estado emocional afecta forma temporalmente
+    if (this.emotions) {
+      factor += this.emotions.stress * 0.1; // Estrés contrae
+      factor += this.emotions.confidence * 0.05; // Confianza expande
+    }
+    
+    return clamp(factor, 0.3, 1.5);
+  }
+
+  /**
+   * Actualiza la morfología procedural dinámicamente
+   * @param {number} dt - Delta time
+   * @param {Object} biome - Bioma actual
+   */
+  updateMorphology(dt, biome) {
+    const dtSec = dt / 1000;
+    this.noiseOffset += dtSec * 0.5; // Animación lenta
+    
+    // Recalcular form factor según cambios de rol/estado
+    const targetForm = this.calculateFormFactor();
+    this.formFactor = lerp(this.formFactor, targetForm, dtSec * 0.5); // Transición suave
+    
+    // Actualizar offsets de vértices con noise procedural
+    for (let i = 0; i < this.baseVertices; i++) {
+      const angle = (i / this.baseVertices) * Math.PI * 2;
+      
+      // Noise basado en tiempo para animación orgánica
+      const noise = Math.sin(angle * 3 + this.noiseOffset) * 0.02 +
+                    Math.cos(angle * 5 + this.noiseOffset * 0.7) * 0.01;
+      
+      // Modificadores dinámicos
+      const aggressionMod = this.genes.aggression * 0.15 * (1 + this.emotions.stress * 0.3);
+      const socialMod = this.genes.sociability * 0.05;
+      const biomeMod = biome ? biome.toxicity * 0.1 : 0; // Tóxico distorsiona
+      
+      // Objetivo de offset
+      const targetOffset = (Math.sin(angle * 3 + this.noiseOffset) * aggressionMod) +
+                           (Math.cos(angle * 2) * socialMod) +
+                           noise +
+                           biomeMod;
+      
+      // Interpolación suave
+      this.vertexOffsets[i] = lerp(this.vertexOffsets[i], targetOffset, dtSec * 2);
+    }
+    
+    // Rotación basada en velocidad y curiosidad
+    this.angle += this.rotationSpeed * (1 + this.genes.curiosity * 0.2) * dtSec;
+  }
+
+  /**
    * Actualiza el estado de la célula
    * @param {number} dt - Delta time en ms
    * @param {Array<Cell>} cells - Todas las células
@@ -139,6 +227,13 @@ export class Cell {
     
     const dtSec = dt / 1000;
     this.age += dtSec;
+    
+    // Obtener bioma actual
+    const currentBiome = biomes.getBiomeAt(this.x, this.y);
+    this.currentBiome = currentBiome;
+    
+    // Actualizar morfología procedural (forma dinámica)
+    this.updateMorphology(dt, currentBiome);
     
     // Actualizar emociones
     this.emotions.update(dtSec, this.energy / this.maxEnergy);
@@ -462,32 +557,76 @@ export class Cell {
   render(ctx, debug = false) {
     this.pulsePhase += 0.05;
     const pulse = 1 + Math.sin(this.pulsePhase) * 0.05;
-    
-    // Cuerpo principal
-    const gradient = ctx.createRadialGradient(
-      this.x, this.y, 0,
-      this.x, this.y, this.radius * pulse
-    );
-    gradient.addColorStop(0, this.color);
-    gradient.addColorStop(0.7, this.color.replace('rgb', 'rgba').replace(')', ', 0.8)'));
-    gradient.addColorStop(1, 'transparent');
-    
+
+    // Guardar contexto para transformaciones
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    // Dibujar forma procedural con vértices dinámicos
+    const scaledRadius = this.radius * pulse * this.formFactor;
+
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * pulse, 0, Math.PI * 2);
+    for (let i = 0; i < this.baseVertices; i++) {
+      const angle = (i / this.baseVertices) * Math.PI * 2;
+
+      // Radio base + offset dinámico + escala por formFactor
+      const vertexRadius = scaledRadius * (1 + this.vertexOffsets[i] * 2);
+      const x = Math.cos(angle) * vertexRadius;
+      const y = Math.sin(angle) * vertexRadius;
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        // Curvas suaves entre vértices
+        const prevAngle = ((i - 1) / this.baseVertices) * Math.PI * 2;
+        const prevRadius = scaledRadius * (1 + this.vertexOffsets[i - 1] * 2);
+        const cpX = Math.cos(prevAngle) * prevRadius * 0.8 + Math.cos(angle) * vertexRadius * 0.2;
+        const cpY = Math.sin(prevAngle) * prevRadius * 0.8 + Math.sin(angle) * vertexRadius * 0.2;
+        ctx.quadraticCurveTo(cpX, cpY, x, y);
+      }
+    }
+    ctx.closePath();
+
+    // Gradiente basado en energía y emociones
+    const energyFactor = this.energy / this.maxEnergy;
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, scaledRadius * 1.2);
+
+    // Color dinámico según estado emocional
+    const r = Math.floor(100 + this.genes.aggression * 1.5 + this.emotions.stress * 30);
+    const g = Math.floor(150 + this.genes.sociability * 0.8 - this.emotions.frustration * 20);
+    const b = Math.floor(100 + this.genes.curiosity * 1.2 + this.emotions.curiosity * 25);
+    const baseColor = `rgb(${r},${g},${b})`;
+
+    gradient.addColorStop(0, baseColor);
+    gradient.addColorStop(0.6, baseColor.replace('rgb', 'rgba').replace(')', `, ${0.7 + energyFactor * 0.3})`));
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
+
     ctx.fillStyle = gradient;
     ctx.fill();
-    
-    // Núcleo
+
+    // Borde brillante si hay estrés o confianza alta
+    if (this.emotions.stress > 0.5 || this.emotions.confidence > 0.6) {
+      ctx.strokeStyle = this.emotions.stress > 0.5 ? 'rgba(255, 100, 100, 0.6)' : 'rgba(100, 255, 100, 0.4)';
+      ctx.lineWidth = 1 + (this.emotions.stress + this.emotions.confidence) * 2;
+      ctx.stroke();
+    }
+
+    // Núcleo pulsante
+    const nucleusSize = this.radius * 0.25 * (1 + Math.sin(this.pulsePhase * 2) * 0.2);
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * 0.3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.arc(0, 0, nucleusSize, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + energyFactor * 0.4})`;
     ctx.fill();
-    
-    // Indicador de dirección
+
+    // Restaurar contexto
+    ctx.restore();
+
+    // Indicador de dirección (fuera de la rotación)
     const arrowLen = this.radius * 1.5;
     const arrowX = this.x + Math.cos(this.angle) * arrowLen;
     const arrowY = this.y + Math.sin(this.angle) * arrowLen;
-    
+
     ctx.beginPath();
     ctx.moveTo(this.x, this.y);
     ctx.lineTo(arrowX, arrowY);
