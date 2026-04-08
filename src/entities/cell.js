@@ -58,7 +58,7 @@ export class Cell {
     // Derivados de genes
     this.radius = 8 + this.genes.size * 0.8;
     this.maxSpeed = 0.5 + this.genes.speed * 0.04;
-    this.perceptionRadius = 50 + this.genes.perception * 3;
+    this.perceptionRadius = 50 + this.genes.senseRange * 3;
     
     // Energía
     this.energy = parent ? parent.energy * 0.4 : 80;
@@ -112,8 +112,8 @@ export class Cell {
    */
   generateGenes() {
     const genes = {};
-    for (const gene of GENES) {
-      genes[gene.name] = randomRange(gene.min, gene.max);
+    for (const [name, config] of Object.entries(GENES)) {
+      genes[name] = randomRange(config.n, config.x);
     }
     return genes;
   }
@@ -123,12 +123,15 @@ export class Cell {
    * @returns {string}
    */
   determineRole() {
+    // Nota: this.emotions aún no está inicializado, usar valores por defecto
+    const contentment = 0.5; // valor por defecto
+    
     const scores = {
       explorer: this.genes.curiosity * 0.4 + this.personality.creativity * 0.3 + (1 - this.personality.caution) * 0.3,
       worker: this.genes.metabolism * 0.3 + this.personality.routine * 0.4 + this.genes.speed * 0.3,
       defender: this.genes.aggression * 0.4 + this.genes.defense * 0.3 + this.personality.stubbornness * 0.3,
-      reproducer: this.genes.reproduction * 0.5 + this.emotions.contentment * 0.3 + this.personality.optimism * 0.2,
-      signaler: this.genes.sociability * 0.5 + this.personality.empathy * 0.3 + this.genes.perception * 0.2
+      reproducer: this.genes.reproduction * 0.5 + contentment * 0.3 + this.personality.optimism * 0.2,
+      signaler: this.genes.sociability * 0.5 + this.personality.empathy * 0.3 + (this.genes.senseRange || 0.5) * 0.2
     };
     
     return Object.entries(scores).reduce((a, b) => scores[a[0]] > scores[b[0]] ? a : b)[0];
@@ -247,6 +250,11 @@ export class Cell {
     const biomePenalty = this.currentBiome && this.currentBiome.type === 'toxic' ? 1.5 : 1;
     this.energy -= this.metabolism * biomePenalty * dtSec;
     
+    // Prevenir energía negativa
+    if (this.energy < 0) {
+      this.energy = 0;
+    }
+    
     // Muerte por energía
     if (this.energy <= 0) {
       this.die('starvation');
@@ -304,9 +312,10 @@ export class Cell {
       if (d < this.perceptionRadius) {
         nearbyCells.push({ cell, distance: d });
         
-        if (cell.genes.aggression > 0.7 && cell.energy > this.energy * 1.2) {
+        // Validar que genes exista antes de acceder
+        if (cell.genes && cell.genes.aggression > 0.7 && cell.energy > this.energy * 1.2) {
           predators.push({ cell, distance: d });
-        } else if (cell.colonyId === this.colonyId || cell.genes.sociability > 0.6) {
+        } else if (cell.colonyId === this.colonyId || (cell.genes && cell.genes.sociability > 0.6)) {
           allies.push({ cell, distance: d });
         }
       }
