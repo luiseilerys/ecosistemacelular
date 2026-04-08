@@ -86,7 +86,6 @@ export class Cell {
     
     // Colonias/Organismos
     this.colonyId = null;
-    this.colonyRole = null;
     this.inColony = false;      // Si está físicamente unida a un organismo multicelular
     this.organRole = null;      // Rol dentro del organismo (brain, stomach, muscle, defender, worker)
     

@@ -263,7 +263,7 @@ export class Ecosystem {
       let joinedExisting = false;
       
       for (const other of nearby) {
-        if (other !== cell && other.colonyId && !other.inColony && other.energy > 30) {
+        if (other !== cell && other.colonyId && other.inColony && other.energy > 30) {
           const colony = this.colonies.getColony(other.colonyId);
           if (colony && colony.population < colony.maxPopulation) {
             // Unirse al organismo existente
@@ -309,13 +309,11 @@ export class Ecosystem {
     // Eliminar comida consumida
     this.foods = this.foods.filter(food => !food.dead);
     
-    // Actualizar gestor de colonias
+    // Actualizar gestor de colonias - limpiar miembros muertos
     for (const colony of this.colonies.colonies.values()) {
-      for (const memberId of colony.members) {
-        const member = this.cells.find(c => c.id === memberId);
-        if (!member || member.dead) {
-          colony.removeMember(memberId);
-        }
+      const deadCells = colony.cells.filter(c => c.dead);
+      for (const cell of deadCells) {
+        colony.removeMember(cell);
       }
     }
   }
