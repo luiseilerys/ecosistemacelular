@@ -663,12 +663,12 @@ export class Colony {
       x: this.x,
       y: this.y,
       radius: this.radius,
-      members: Array.from(this.members),
+      memberIds: this.cells.map(c => c.id),
       population: this.population,
       maxPopulation: this.maxPopulation,
       resources: this.resources,
       defenseLevel: this.defenseLevel,
-      roles: JSON.parse(JSON.stringify(this.roles)),
+      roles: Object.fromEntries(Object.entries(this.roles).map(([k, v]) => [k, v ? v.id : null])),
       color: this.color
     };
   }
@@ -681,14 +681,13 @@ export class Colony {
   static fromJSON(data) {
     const colony = new Colony(data.id, { id: data.founderId, color: data.color }, data.x, data.y);
     
-    colony.members = new Set(data.members);
     colony.population = data.population;
     colony.maxPopulation = data.maxPopulation;
     colony.resources = data.resources;
     colony.defenseLevel = data.defenseLevel;
-    colony.roles = data.roles;
     colony.color = data.color;
     colony.radius = data.radius;
+    // Nota: Las células y roles se restauran externamente cuando se cargan las células
     
     return colony;
   }
