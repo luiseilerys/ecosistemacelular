@@ -332,13 +332,31 @@ class BehavioralPlanner {
 }
 
 class Colony {
-  constructor(id, center) {
-    this.id=id; this.center=center; this.members=new Set(); this.energyPool=0; this.signals=[];
-    this.roleDist={SCOUT:0,WORKER:0,DEFENDER:0,BREEDER:0,SIGNALER:0}; this.age=0; this.tactics=null; this.mood=0.5;
+  constructor(id, founder) {
+    this.id=id; 
+    this.founderId = founder.id;
+    this.center={x:founder.x,y:founder.y}; 
+    this.members=new Set([founder]); 
+    this.energyPool=0; 
+    this.signals=[];
+    this.roleDist={SCOUT:0,WORKER:0,DEFENDER:0,BREEDER:0,SIGNALER:0}; 
+    this.age=0; 
+    this.tactics=null; 
+    this.mood=0.5;
+    this.radius = 25;
+    // Roles con emojis para visualización
+    this.roleEmojis = {SCOUT:'🔍', WORKER:'⚒️', DEFENDER:'🛡️', BREEDER:'🧬', SIGNALER:'📡'};
+    // Posicionamiento en espiral
+    this.angleOffset = Math.random() * Math.PI * 2;
   }
   assignRoles() {
+    // Resetear contadores
+    this.roleDist={SCOUT:0,WORKER:0,DEFENDER:0,BREEDER:0,SIGNALER:0};
+    // Limpiar roles anteriores
+    for(const c of this.members) { c.role = null; c.roleColor = null; }
+    
     for(const c of this.members){
-      if(c.role)continue; let scores={}; const g=c.genes, p=c.personality;
+      let scores={}; const g=c.genes, p=c.personality;
       for(const [r,mods] of Object.entries(ROLES)){
         let s=1; if(mods.speed)s*=g.speed*mods.speed; if(mods.agg)s*=g.aggression*mods.agg*(1+p.caution*0.3);
         if(mods.size)s*=g.size*mods.size; if(mods.metab)s*=(2-g.metabolism)*mods.metab;
@@ -350,6 +368,25 @@ class Colony {
       c.role=assigned; c.roleColor=ROLES[assigned].c; this.roleDist[assigned]++;
     }
   }
+  positionMembers() {
+    // Posicionar células en formación circular/espiral alrededor del centro
+    const membersArray = Array.from(this.members);
+    const angleStep = (Math.PI * 2) / membersArray.length;
+    
+    membersArray.forEach((member, index) => {
+      if (member.dead) return;
+      const angle = this.angleOffset + index * angleStep;
+      const distance = this.radius * 0.7; // Mantener células cercanas al centro
+      
+      // Calcular posición objetivo
+      const targetX = this.center.x + Math.cos(angle) * distance;
+      const targetY = this.center.y + Math.sin(angle) * distance;
+      
+      // Mover célula hacia su posición (suavemente)
+      member.x = lp(member.x, targetX, 0.1);
+      member.y = lp(member.y, targetY, 0.1);
+    });
+  }
   emitSignal(type,x,y,strength=1.0){this.signals.push({type,x,y,strength:cl(strength,0,1),age:0});}
   developTactics(){
     const defC=this.roleDist.DEFENDER||0, scC=this.roleDist.SCOUT||0, t=this.members.size;
@@ -358,12 +395,69 @@ class Colony {
   update(dt){
     this.age+=dt; this.energyPool*=0.997;
     this.signals=this.signals.filter(s=>{s.age+=dt;s.strength*=0.96;return s.age<500&&s.strength>0.05;});
-    let sx=0,sy=0,c=0; for(const m of this.members) if(!m.dead){sx+=m.x;sy+=m.y;c++;} else this.members.delete(m);
-    if(c>0) this.center={x:sx/c,y:sy/c};
+    let sx=0,sy=0,c=0; 
+    const aliveMembers = [];
+    for(const m of this.members) {
+      if(!m.dead){
+        sx+=m.x; sy+=m.y; c++;
+        aliveMembers.push(m);
+      } else {
+        this.members.delete(m);
+      }
+    }
+    if(c>0) {
+      this.center={x:sx/c,y:sy/c};
+      // Actualizar radio basado en población
+      this.radius = 20 + c * 6;
+    }
     const avgE=c>0?Array.from(this.members).reduce((a,m)=>a+m.energy,0)/c/100:0;
     this.mood=lp(this.mood,avgE,0.02);
+    // Posicionar miembros en formación
+    this.positionMembers();
     if(Math.floor(this.age*10)%200===0) this.developTactics();
     return this.members.size>=2;
+  }
+  render(ctx, cam) {
+    // Dibujar conexiones entre miembros (tejido conectivo)
+    const membersArray = Array.from(this.members).filter(m => !m.dead);
+    if (membersArray.length < 2) return;
+    
+    ctx.strokeStyle = `rgba(66, 165, 245, 0.25)`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < membersArray.length; i++) {
+      for (let j = i + 1; j < membersArray.length; j++) {
+        const d = dist(membersArray[i].x, membersArray[i].y, membersArray[j].x, membersArray[j].y);
+        if (d < 80) {
+          const ax = (membersArray[i].x - cam.x) * cam.z + ctx.canvas.width / 2;
+          const ay = (membersArray[i].y - cam.y) * cam.z + ctx.canvas.height / 2;
+          const bx = (membersArray[j].x - cam.x) * cam.z + ctx.canvas.width / 2;
+          const by = (membersArray[j].y - cam.y) * cam.z + ctx.canvas.height / 2;
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+        }
+      }
+    }
+    ctx.stroke();
+    
+    // Dibujar aura del organismo
+    const cx = (this.center.x - cam.x) * cam.z + ctx.canvas.width / 2;
+    const cy = (this.center.y - cam.y) * cam.z + ctx.canvas.height / 2;
+    const r = this.radius * cam.z;
+    
+    const gradient = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 1.5);
+    gradient.addColorStop(0, 'rgba(66, 165, 245, 0.12)');
+    gradient.addColorStop(0.7, 'rgba(66, 165, 245, 0.04)');
+    gradient.addColorStop(1, 'transparent');
+    
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    ctx.strokeStyle = 'rgba(66, 165, 245, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 }
 
@@ -571,7 +665,8 @@ class Cell {
     glow.addColorStop(1,'transparent'); ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy,pr*2.5,0,Math.PI*2);ctx.fill();
     ctx.beginPath();ctx.arc(sx,sy,pr,0,Math.PI*2);ctx.fillStyle=this.color;ctx.fill();ctx.strokeStyle=`rgba(255,255,255,0.15)`;ctx.lineWidth=Math.max(1,c.z);ctx.stroke();
     ctx.beginPath();ctx.arc(sx,sy,pr*0.35,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,0.2)`;ctx.fill();
-    if(this.role){ctx.beginPath();ctx.arc(sx,sy,pr+2.5*c.z,0,Math.PI*2);ctx.strokeStyle=this.roleColor;ctx.lineWidth=Math.max(2,3*c.z);ctx.stroke();}
+    // No dibujar anillo de rol aquí si está en colonia (se dibuja con emoji)
+    if(this.role && !this.colony){ctx.beginPath();ctx.arc(sx,sy,pr+2.5*c.z,0,Math.PI*2);ctx.strokeStyle=this.roleColor;ctx.lineWidth=Math.max(2,3*c.z);ctx.stroke();}
     if(debugMode&&this.decision?.target){const t=this.decision.target;
       let tx,ty; if(t.x!==undefined){tx=t.x;ty=t.y;} else{tx=t.x;ty=t.y;}
       const tsx=(tx-c.x)*c.z+ctx.canvas.width/2,tsy=(ty-c.y)*c.z+ctx.canvas.height/2;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(tsx,tsy);
@@ -617,7 +712,8 @@ function update(){
   cells=cells.filter(c=>!c.dead); food=food.filter(f=>!f.eaten);
   const unassigned=cells.filter(c=>!c.colony&&c.genes.sociability>0.5&&c.age>0.5), used=new Set();
   for(const c of unassigned){if(used.has(c.id))continue;const nearby=unassigned.filter(o=>!used.has(o.id)&&dist(c.x,c.y,o.x,o.y)<80);
-    if(nearby.length>=4){const col=new Colony(colonies.length,{x:c.x,y:c.y});for(const m of nearby.slice(0,8)){m.colony=col;col.members.add(m);used.add(m.id);col.emitSignal('rally',m.x,m.y);}
+    if(nearby.length>=4){const founder = nearby[0]; const col=new Colony(colonies.length, founder);
+      for(const m of nearby.slice(1,8)){m.colony=col;col.members.add(m);used.add(m.id);col.emitSignal('rally',m.x,m.y);}
       col.assignRoles();col.developTactics();colonies.push(col);addLog(`🏛️ Colonia #${col.id} (${col.members.size} miembros, táctica: ${col.tactics})`,'colony');}}
   if(cells.length<8){for(let i=0;i<5;i++){const g={};for(const n of GNAME)g[n]=rn(GENES[n].n,GENES[n].x);cells.push(new Cell(rn(200,3800),rn(200,3800),g,0));}addLog('🔄 Repoblación','birth');}
   if(selectedCell&&!selectedCell.dead){cam.tx=selectedCell.x;cam.ty=selectedCell.y;}
@@ -630,12 +726,43 @@ function render(){
   const grd=ctx.createRadialGradient(ctx.canvas.width/2,ctx.canvas.height/2,0,ctx.canvas.width/2,ctx.canvas.height/2,ctx.canvas.width*0.8);
   grd.addColorStop(0,'#080b10');grd.addColorStop(1,'#030406');ctx.fillStyle=grd;ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
   drawBiomes(ctx,cam);
+  // Renderizar señales de colonias
   for(const col of colonies) for(const s of col.signals){const sx=(s.x-cam.x)*cam.z+ctx.canvas.width/2,sy=(s.y-cam.y)*cam.z+ctx.canvas.height/2,sr=120*s.str*cam.z;
     ctx.beginPath();ctx.arc(sx,sy,sr,0,Math.PI*2);ctx.fillStyle=s.type==='danger'?`rgba(239,83,80,${s.str*0.12})`:s.type==='food'?`rgba(102,187,106,${s.str*0.12})`:`rgba(255,255,100,${s.str*0.08})`;ctx.fill();}
-  for(const col of colonies){const ms=Array.from(col.members);for(let i=0;i<ms.length;i++)for(let j=i+1;j<ms.length;j++){const d=dist(ms[i].x,ms[i].y,ms[j].x,ms[j].y);
-    if(d<150){const ax=(ms[i].x-cam.x)*cam.z+ctx.canvas.width/2,ay=(ms[i].y-cam.y)*cam.z+ctx.canvas.height/2,bx=(ms[j].x-cam.x)*cam.z+ctx.canvas.width/2,by=(ms[j].y-cam.y)*cam.z+ctx.canvas.height/2;
-      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.strokeStyle=`rgba(66,165,245,${0.12*(1-d/150)})`;ctx.lineWidth=1;ctx.stroke();}}}
-  for(const f of food) f.draw(ctx,cam); for(const c of cells) c.draw(ctx,cam);
+  
+  // Renderizar organismos (conexiones y aura)
+  for(const col of colonies) {
+    col.render(ctx, cam);
+  }
+  
+  // Renderizar comida y células
+  for(const f of food) f.draw(ctx,cam); 
+  for(const c of cells) {
+    c.draw(ctx,cam);
+    // Dibujar emoji del rol si la célula está en una colonia
+    if(c.colony && c.role && !c.dead) {
+      const sx=(c.x-cam.x)*cam.z+ctx.canvas.width/2;
+      const sy=(c.y-cam.y)*cam.z+ctx.canvas.height/2;
+      const r=c.radius*cam.z;
+      
+      // Fondo circular para el emoji
+      ctx.beginPath();
+      ctx.arc(sx, sy - r * 1.3, r * 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(10, 10, 18, 0.85)';
+      ctx.fill();
+      ctx.strokeStyle = c.roleColor || '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      
+      // Emoji del rol
+      ctx.font = `bold ${Math.max(10, r * 0.9)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      const emoji = c.colony.roleEmojis[c.role] || '⚪';
+      ctx.fillText(emoji, sx, sy - r * 1.3);
+    }
+  }
   if(debugMode) for(const c of cells){const sx=(c.x-cam.x)*cam.z+ctx.canvas.width/2,sy=(c.y-cam.y)*cam.z+ctx.canvas.height/2;
     if(sx>-120&&sx<ctx.canvas.width+120&&sy>-120&&sy<ctx.canvas.height+120) c.drawDebug(ctx,cam);}
   document.getElementById('stat-cells').textContent=`🧬${cells.length}`; document.getElementById('stat-food').textContent=`🟢${food.length}`;
