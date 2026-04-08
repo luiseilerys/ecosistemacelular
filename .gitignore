@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The modification of 'src/entities/cell.js' is a source code file and doesn't require any special ignore rules.
+(src/core/ecosystem.js, src/entities/cell.js)

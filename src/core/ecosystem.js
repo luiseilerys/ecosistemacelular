@@ -236,7 +236,7 @@ export class Ecosystem {
   mixGenes(genes1, genes2) {
     const child = {};
     
-    for (const gene in genes1) {
+    for (const gene of Object.keys(genes1)) {
       // 50% de probabilidad de cada padre
       const fromParent1 = Math.random() < 0.5;
       const baseValue = fromParent1 ? genes1[gene] : genes2[gene];
