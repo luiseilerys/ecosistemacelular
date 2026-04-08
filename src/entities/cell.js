@@ -167,7 +167,7 @@ export class Cell {
     // Genes afectan forma
     factor += this.genes.aggression * 0.2; // Más agresivo = más picos
     factor -= this.genes.sociability * 0.1; // Más social = más suave
-    factor += (this.genes.defense - 5) * 0.05; // Defensa añade irregularidad
+    factor += (this.genes.defense - 0.5) * 0.2; // Defensa añade irregularidad (rango 0-1, centro 0.5)
     
     // Estado emocional afecta forma temporalmente
     if (this.emotions) {
