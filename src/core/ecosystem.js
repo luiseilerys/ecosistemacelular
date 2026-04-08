@@ -168,8 +168,8 @@ export class Ecosystem {
       this.createFood(x, y);
     }
     
-    // Actualizar colonias
-    this.colonies.update(dtSec, this.cells);
+    // Actualizar colonias/organismos
+    this.colonies.update(dtSec, this.cells, this);
     
     // Actualizar estadísticas
     this.updateStats();
@@ -252,15 +252,39 @@ export class Ecosystem {
   }
 
   /**
-   * Intenta formar una colonia
+   * Intenta formar una colonia/organismo multicelular
    * @param {Cell} cell
    */
   attemptColonyFormation(cell) {
-    if (!cell.colonyId && Math.random() < 0.01) {
-      const colony = this.colonies.createColony(cell);
+    // Las células pueden unirse a organismos existentes o formar nuevos
+    if (!cell.colonyId && cell.energy > 50 && Math.random() < 0.02) {
+      // Buscar organismo cercano para unirse
+      const nearby = this.spatialGrid.queryRadius(cell.x, cell.y, 60);
+      let joinedExisting = false;
       
-      if (this.onColonyCreated) {
-        this.onColonyCreated(colony);
+      for (const other of nearby) {
+        if (other !== cell && other.colonyId && !other.inColony && other.energy > 30) {
+          const colony = this.colonies.getColony(other.colonyId);
+          if (colony && colony.population < colony.maxPopulation) {
+            // Unirse al organismo existente
+            colony.addMember(cell);
+            joinedExisting = true;
+            
+            if (this.onColonyCreated) {
+              this.onColonyCreated(colony);
+            }
+            break;
+          }
+        }
+      }
+      
+      // Si no se unió a ninguno, crear nuevo organismo
+      if (!joinedExisting) {
+        const colony = this.colonies.createColony(cell);
+        
+        if (this.onColonyCreated) {
+          this.onColonyCreated(colony);
+        }
       }
     }
   }
