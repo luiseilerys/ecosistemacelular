@@ -492,17 +492,146 @@ export class Cell {
     }
     
     const d = dist(this.x, this.y, this.target.cell.x, this.target.cell.y);
-    if (d < 30) {
+    const targetCell = this.target.cell;
+    
+    // Si está cerca, intentar unirse físicamente
+    if (d < this.radius + targetCell.radius + 5) {
+      // Verificar si ya están unidas
+      if (!this.inColony && !targetCell.inColony) {
+        // Decidir unirse basado en sociabilidad y emociones
+        const joinChance = (this.genes.sociability + targetCell.genes.sociability) * 0.5 
+                          + this.emotions.contentment * 0.3;
+        
+        if (Math.random() < joinChance) {
+          // Unirse físicamente - pegar por los bordes
+          this.attachToCell(targetCell);
+        }
+      }
+      
+      // Si ya están unidas, mantener conexión
+      if (this.inColony && this.colonyId === targetCell.colonyId) {
+        this.maintainAttachment(dtSec, targetCell);
+      }
+      
       this.emotions.modify('contentment', 0.01);
       this.vx *= 0.9;
       this.vy *= 0.9;
     } else {
-      const dx = this.target.cell.x - this.x;
-      const dy = this.target.cell.y - this.y;
+      // Acercarse al objetivo
+      const dx = targetCell.x - this.x;
+      const dy = targetCell.y - this.y;
       this.angle = Math.atan2(dy, dx);
       this.vx = Math.cos(this.angle) * this.maxSpeed * 0.5;
       this.vy = Math.sin(this.angle) * this.maxSpeed * 0.5;
     }
+  }
+
+  /**
+   * Se une físicamente a otra célula pegándose por los bordes
+   * @param {Cell} otherCell - Célula a la que unirse
+   */
+  attachToCell(otherCell) {
+    // Calcular punto de unión en los bordes
+    const angle = Math.atan2(otherCell.y - this.y, otherCell.x - this.x);
+    const targetDist = this.radius + otherCell.radius - 2; // Pequeña superposición para realismo
+    
+    // Posición final pegada al borde
+    const targetX = otherCell.x - Math.cos(angle) * targetDist;
+    const targetY = otherCell.y - Math.sin(angle) * targetDist;
+    
+    // Mover instantáneamente a la posición de unión
+    this.x = targetX;
+    this.y = targetY;
+    
+    // Detener movimiento
+    this.vx = 0;
+    this.vy = 0;
+    
+    // Marcar como unida
+    this.inColony = true;
+    
+    // Asignar mismo ID de colonia
+    if (otherCell.colonyId) {
+      this.colonyId = otherCell.colonyId;
+    } else {
+      // Crear nueva colonia
+      this.colonyId = `colony_${Math.random().toString(36).substr(2, 6)}`;
+      otherCell.colonyId = this.colonyId;
+      otherCell.inColony = true;
+    }
+    
+    // Asignar rol en el organismo
+    this.organRole = this.determineOrganRole();
+    
+    // Registrar en memoria
+    this.memory.add({
+      type: 'colony_join',
+      timestamp: this.age,
+      colonyId: this.colonyId,
+      organRole: this.organRole,
+      attachedTo: otherCell.id
+    });
+    
+    // Notar a la otra célula también
+    if (!otherCell.inColony) {
+      otherCell.inColony = true;
+      otherCell.organRole = otherCell.determineOrganRole();
+    }
+  }
+
+  /**
+   * Mantiene la unión física con células adyacentes en la colonia
+   * @param {number} dtSec
+   * @param {Cell} attachedCell
+   */
+  maintainAttachment(dtSec, attachedCell) {
+    // Calcular distancia ideal
+    const idealDist = this.radius + attachedCell.radius - 2;
+    const currentDist = dist(this.x, this.y, attachedCell.x, attachedCell.y);
+    
+    // Si se separan demasiado, aplicar fuerza de atracción
+    if (currentDist > idealDist + 1) {
+      const angle = Math.atan2(attachedCell.y - this.y, attachedCell.x - this.x);
+      const force = (currentDist - idealDist) * 0.1; // Fuerza elástica
+      
+      this.vx += Math.cos(angle) * force;
+      this.vy += Math.sin(angle) * force;
+      
+      // Amortiguar movimiento
+      this.vx *= 0.85;
+      this.vy *= 0.85;
+    } else if (currentDist < idealDist - 1) {
+      // Si están muy juntas, aplicar fuerza de repulsión suave
+      const angle = Math.atan2(this.y - attachedCell.y, this.x - attachedCell.x);
+      const force = (idealDist - currentDist) * 0.05;
+      
+      this.vx += Math.cos(angle) * force;
+      this.vy += Math.sin(angle) * force;
+      
+      this.vx *= 0.85;
+      this.vy *= 0.85;
+    } else {
+      // Mantenerse en posición
+      this.vx *= 0.9;
+      this.vy *= 0.9;
+    }
+  }
+
+  /**
+   * Determina el rol orgánico dentro de la colonia/organismo
+   * @returns {string}
+   */
+  determineOrganRole() {
+    // Basado en genes, personalidad y posición relativa
+    const scores = {
+      brain: this.genes.curiosity * 0.4 + this.personality.creativity * 0.3 + this.genes.senseRange * 0.3,
+      stomach: this.genes.metabolism * 0.4 + this.genes.size * 0.3 + this.personality.routine * 0.3,
+      muscle: this.genes.speed * 0.4 + this.genes.aggression * 0.3 + this.personality.stubbornness * 0.3,
+      defender: this.genes.aggression * 0.5 + this.genes.defense * 0.3 + this.personality.stubbornness * 0.2,
+      worker: this.genes.sociability * 0.4 + this.personality.empathy * 0.3 + this.genes.speed * 0.3
+    };
+    
+    return Object.entries(scores).reduce((a, b) => scores[a[0]] > scores[b[0]] ? a : b)[0];
   }
 
   explore(dtSec) {
@@ -531,9 +660,20 @@ export class Cell {
    * @param {number} dtSec
    */
   move(dtSec) {
-    // Aplicar velocidad
-    this.x += this.vx * dtSec * 60;
-    this.y += this.vy * dtSec * 60;
+    // Si está unida a una colonia, aplicar restricciones de movimiento
+    if (this.inColony) {
+      // Movimiento muy limitado cuando está unida
+      this.vx *= 0.8;
+      this.vy *= 0.8;
+      
+      // Aplicar velocidad reducida
+      this.x += this.vx * dtSec * 30;
+      this.y += this.vy * dtSec * 30;
+    } else {
+      // Aplicar velocidad normal
+      this.x += this.vx * dtSec * 60;
+      this.y += this.vy * dtSec * 60;
+    }
     
     // Límites del mundo
     this.x = clamp(this.x, 0, CFG.WS);
@@ -632,6 +772,31 @@ export class Cell {
     // Restaurar contexto
     ctx.restore();
 
+    // Indicador visual de unión a colonia (borde especial)
+    if (this.inColony) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      
+      // Dibujar anillo de conexión
+      const connectionRadius = this.radius * 1.3;
+      ctx.beginPath();
+      ctx.arc(0, 0, connectionRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `hsla(${this.colonyId ? this.colonyId.charCodeAt(5) * 20 : 180}, 80%, 60%, 0.8)`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 2]); // Línea punteada para indicar conexión
+      ctx.stroke();
+      
+      // Mostrar rol del organismo
+      if (this.organRole) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.organRole.substring(0, 3).toUpperCase(), 0, -connectionRadius - 5);
+      }
+      
+      ctx.restore();
+    }
+    
     // Indicador de dirección (fuera de la rotación)
     const arrowLen = this.radius * 1.5;
     const arrowX = this.x + Math.cos(this.angle) * arrowLen;
