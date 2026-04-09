@@ -88,6 +88,8 @@ export class Cell {
     this.colonyId = null;
     this.inColony = false;      // Si está físicamente unida a un organismo multicelular
     this.organRole = null;      // Rol dentro del organismo (brain, stomach, muscle, defender, worker)
+    this.attachments = [];      // Lista de IDs de células adyacentes en la colonia
+    this.attachmentForces = {}; // Fuerzas elásticas por cada conexión
     
     // Render
     this.color = this.calculateColor();
@@ -284,8 +286,8 @@ export class Cell {
     // Ejecutar acción
     this.executeAction(dtSec);
     
-    // Movimiento físico
-    this.move(dtSec);
+    // Movimiento físico (pasar todas las células para mantener estructura de colonia)
+    this.move(dtSec, cells);
     
     // Actualizar bioma
     this.currentBiome = biomes.getBiomeAt(this.x, this.y);
@@ -508,10 +510,8 @@ export class Cell {
         }
       }
       
-      // Si ya están unidas, mantener conexión
-      if (this.inColony && this.colonyId === targetCell.colonyId) {
-        this.maintainAttachment(dtSec, targetCell);
-      }
+      // Si ya están unidas, mantener conexión (ya no se llama aquí, se hace en updateColonyConnections)
+      // this.maintainAttachment(dtSec, targetCell);
       
       this.emotions.modify('contentment', 0.01);
       this.vx *= 0.9;
@@ -543,16 +543,28 @@ export class Cell {
     this.x = targetX;
     this.y = targetY;
     
-    // Detener movimiento
+    // Detener movimiento individual
     this.vx = 0;
     this.vy = 0;
     
     // Marcar como unida
     this.inColony = true;
     
+    // Registrar conexión bidireccional
+    if (!this.attachments.includes(otherCell.id)) {
+      this.attachments.push(otherCell.id);
+      this.attachmentForces[otherCell.id] = { x: 0, y: 0 };
+    }
+    if (!otherCell.attachments.includes(this.id)) {
+      otherCell.attachments.push(this.id);
+      otherCell.attachmentForces[this.id] = { x: 0, y: 0 };
+    }
+    
     // Asignar mismo ID de colonia
     if (otherCell.colonyId) {
       this.colonyId = otherCell.colonyId;
+      // Propagar colonyId a todas las células conectadas indirectamente
+      this.propagateColonyId(this.colonyId);
     } else {
       // Crear nueva colonia
       this.colonyId = `colony_${Math.random().toString(36).substr(2, 6)}`;
@@ -578,42 +590,74 @@ export class Cell {
       otherCell.organRole = otherCell.determineOrganRole();
     }
   }
+  
+  /**
+   * Propaga el ID de colonia a todas las células conectadas
+   */
+  propagateColonyId(colonyId) {
+    // Esta función será llamada desde el ecosistema para propagar a toda la red
+    // Por ahora, solo asignamos el ID localmente
+    this.colonyId = colonyId;
+  }
 
   /**
-   * Mantiene la unión física con células adyacentes en la colonia
+   * Mantiene la unión física con TODAS las células adyacentes en la colonia
    * @param {number} dtSec
-   * @param {Cell} attachedCell
+   * @param {Array<Cell>} allCells - Todas las células para buscar conectadas
    */
-  maintainAttachment(dtSec, attachedCell) {
-    // Calcular distancia ideal
-    const idealDist = this.radius + attachedCell.radius - 2;
-    const currentDist = dist(this.x, this.y, attachedCell.x, attachedCell.y);
+  maintainColonyStructure(dtSec, allCells) {
+    if (this.attachments.length === 0) return;
     
-    // Si se separan demasiado, aplicar fuerza de atracción
-    if (currentDist > idealDist + 1) {
-      const angle = Math.atan2(attachedCell.y - this.y, attachedCell.x - this.x);
-      const force = (currentDist - idealDist) * 0.1; // Fuerza elástica
+    let totalForceX = 0;
+    let totalForceY = 0;
+    
+    // Para cada célula conectada
+    for (const attachedId of this.attachments) {
+      const attachedCell = allCells.find(c => c.id === attachedId);
+      if (!attachedCell || attachedCell.dead) continue;
       
-      this.vx += Math.cos(angle) * force;
-      this.vy += Math.sin(angle) * force;
+      // Calcular distancia ideal basada en radios
+      const idealDist = this.radius + attachedCell.radius - 2;
+      const dx = attachedCell.x - this.x;
+      const dy = attachedCell.y - this.y;
+      const currentDist = Math.hypot(dx, dy);
       
-      // Amortiguar movimiento
-      this.vx *= 0.85;
-      this.vy *= 0.85;
-    } else if (currentDist < idealDist - 1) {
-      // Si están muy juntas, aplicar fuerza de repulsión suave
-      const angle = Math.atan2(this.y - attachedCell.y, this.x - attachedCell.x);
-      const force = (idealDist - currentDist) * 0.05;
+      // Calcular fuerza elástica (ley de Hooke)
+      const displacement = currentDist - idealDist;
+      const springConstant = 0.15; // Constante elástica más fuerte
+      const damping = 0.85; // Amortiguamiento
       
-      this.vx += Math.cos(angle) * force;
-      this.vy += Math.sin(angle) * force;
+      // Normalizar dirección
+      if (currentDist > 0.1) {
+        const nx = dx / currentDist;
+        const ny = dy / currentDist;
+        
+        // Fuerza elástica
+        const force = displacement * springConstant;
+        
+        // Acumular fuerzas
+        totalForceX += nx * force;
+        totalForceY += ny * force;
+        
+        // Guardar fuerza para esta conexión
+        this.attachmentForces[attachedId] = { x: nx * force, y: ny * force };
+      }
+    }
+    
+    // Aplicar fuerzas acumuladas con amortiguamiento
+    if (this.attachments.length > 0) {
+      // Promediar fuerzas entre todas las conexiones
+      const avgForceX = totalForceX / this.attachments.length;
+      const avgForceY = totalForceY / this.attachments.length;
       
-      this.vx *= 0.85;
-      this.vy *= 0.85;
-    } else {
-      // Mantenerse en posición
-      this.vx *= 0.9;
-      this.vy *= 0.9;
+      // Aplicar al movimiento actual
+      this.vx += avgForceX;
+      this.vy += avgForceY;
+      
+      // Amortiguar más fuerte cuantas más conexiones tenga (más rígida la estructura)
+      const dampingFactor = Math.pow(0.88, this.attachments.length);
+      this.vx *= dampingFactor;
+      this.vy *= dampingFactor;
     }
   }
 
@@ -658,15 +702,28 @@ export class Cell {
   /**
    * Aplica movimiento físico
    * @param {number} dtSec
+   * @param {Array<Cell>} [allCells] - Todas las células (para mantener estructura de colonia)
    */
-  move(dtSec) {
-    // Si está unida a una colonia, aplicar restricciones de movimiento
-    if (this.inColony) {
-      // Movimiento muy limitado cuando está unida
+  move(dtSec, allCells = null) {
+    // Si está unida a una colonia, aplicar restricciones de movimiento y mantener estructura
+    if (this.inColony && this.attachments.length > 0) {
+      // Mantener estructura de colonia con todas las conexiones
+      if (allCells) {
+        this.maintainColonyStructure(dtSec, allCells);
+      }
+      
+      // Movimiento muy limitado cuando está unida (más rígido cuantas más conexiones)
+      const colonyDamping = Math.pow(0.75, Math.min(this.attachments.length, 4));
+      this.vx *= colonyDamping;
+      this.vy *= colonyDamping;
+      
+      // Aplicar velocidad reducida pero permitir movimiento colectivo
+      this.x += this.vx * dtSec * 20;
+      this.y += this.vy * dtSec * 20;
+    } else if (this.inColony) {
+      // En colonia pero sin conexiones activas (caso transicional)
       this.vx *= 0.8;
       this.vy *= 0.8;
-      
-      // Aplicar velocidad reducida
       this.x += this.vx * dtSec * 30;
       this.y += this.vy * dtSec * 30;
     } else {
@@ -772,7 +829,7 @@ export class Cell {
     // Restaurar contexto
     ctx.restore();
 
-    // Indicador visual de unión a colonia (borde especial)
+    // Indicador visual de unión a colonia (borde especial y conexiones)
     if (this.inColony) {
       ctx.save();
       ctx.translate(this.x, this.y);
@@ -792,6 +849,14 @@ export class Cell {
         ctx.font = 'bold 8px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(this.organRole.substring(0, 3).toUpperCase(), 0, -connectionRadius - 5);
+      }
+      
+      // Dibujar líneas de conexión a células adyacentes
+      if (this.attachments.length > 0 && debug) {
+        ctx.strokeStyle = `hsla(${this.colonyId ? this.colonyId.charCodeAt(5) * 20 : 180}, 100%, 70%, 0.4)`;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]); // Línea sólida para conexiones
+        // Las líneas se dibujan en el render del ecosistema con las posiciones reales
       }
       
       ctx.restore();
@@ -869,7 +934,10 @@ export class Cell {
       emotions: this.emotions.toJSON(),
       neuralCore: this.neuralCore.toJSON(),
       role: this.role,
-      colonyId: this.colonyId
+      colonyId: this.colonyId,
+      inColony: this.inColony,
+      organRole: this.organRole,
+      attachments: this.attachments
     };
   }
 
@@ -893,6 +961,9 @@ export class Cell {
     cell.neuralCore = NeuralCore.fromJSON(data.neuralCore);
     cell.role = data.role;
     cell.colonyId = data.colonyId;
+    cell.inColony = data.inColony || false;
+    cell.organRole = data.organRole || null;
+    cell.attachments = data.attachments || [];
     
     return cell;
   }
